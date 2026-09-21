@@ -1,0 +1,14 @@
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\bin\Debug\net8.0\SWP_SportCenter.Repository.deps.json
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\bin\Debug\net8.0\SWP_SportCenter.Repository.runtimeconfig.json
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\bin\Debug\net8.0\SWP_SportCenter.Repository.dll
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\bin\Debug\net8.0\SWP_SportCenter.Repository.pdb
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.csproj.AssemblyReference.cache
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.GeneratedMSBuildEditorConfig.editorconfig
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.AssemblyInfoInputs.cache
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.AssemblyInfo.cs
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.csproj.CoreCompileInputs.cache
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.dll
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\refint\SWP_SportCenter.Repository.dll
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.pdb
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\SWP_SportCenter.Repository.genruntimeconfig.cache
+D:\C#\SWP_SportCenter\SWP_SportCenter.Repository\obj\Debug\net8.0\ref\SWP_SportCenter.Repository.dll

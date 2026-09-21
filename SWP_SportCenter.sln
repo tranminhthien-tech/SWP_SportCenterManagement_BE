@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SWP_SportCenter.Api", "SWP_SportCenter.Api\SWP_SportCenter.Api.csproj", "{28E641BB-D4FC-43C1-9AEE-212CCED96975}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SWP_SportCenter.Service", "SWP_SportCenter.Service\SWP_SportCenter.Service.csproj", "{F06CE56F-0661-4AAC-8BC2-E557D05BB9A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SWP_SportCenter.Repository", "SWP_SportCenter.Repository\SWP_SportCenter.Repository.csproj", "{654ED102-3485-4873-9C72-8780F1E387C6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{28E641BB-D4FC-43C1-9AEE-212CCED96975}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28E641BB-D4FC-43C1-9AEE-212CCED96975}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28E641BB-D4FC-43C1-9AEE-212CCED96975}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28E641BB-D4FC-43C1-9AEE-212CCED96975}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F06CE56F-0661-4AAC-8BC2-E557D05BB9A0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F06CE56F-0661-4AAC-8BC2-E557D05BB9A0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F06CE56F-0661-4AAC-8BC2-E557D05BB9A0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F06CE56F-0661-4AAC-8BC2-E557D05BB9A0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{654ED102-3485-4873-9C72-8780F1E387C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{654ED102-3485-4873-9C72-8780F1E387C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{654ED102-3485-4873-9C72-8780F1E387C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{654ED102-3485-4873-9C72-8780F1E387C6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

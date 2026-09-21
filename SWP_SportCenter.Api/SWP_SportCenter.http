@@ -1,0 +1,6 @@
+@SWP_SportCenter_HostAddress = http://localhost:5047
+
+GET {{SWP_SportCenter_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
