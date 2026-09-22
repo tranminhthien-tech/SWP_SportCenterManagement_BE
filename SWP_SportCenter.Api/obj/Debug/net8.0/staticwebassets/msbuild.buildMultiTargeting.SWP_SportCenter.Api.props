@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\SWP_SportCenter.Api.props" />
-</Project>
