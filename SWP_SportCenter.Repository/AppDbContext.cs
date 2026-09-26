@@ -31,7 +31,7 @@ public class AppDbContext: DbContext
     // Membership
     public DbSet<MembershipPackage> MembershipPackages { get; set; }
 
-    public DbSet<MemberMembership> MemberMemberships { get; set; }
+    public DbSet<Membership> Memberships { get; set; }
 
     // Invoice
     public DbSet<Invoice> Invoices { get; set; }
@@ -436,7 +436,7 @@ public class AppDbContext: DbContext
         // MEMBER MEMBERSHIP
         // =========================================================
 
-        modelBuilder.Entity<MemberMembership>(builder =>
+        modelBuilder.Entity<Membership>(builder =>
         {
             builder.ToTable("member_membership");
 
@@ -471,12 +471,12 @@ public class AppDbContext: DbContext
             builder.HasIndex(x => x.PackageId);
 
             builder.HasOne(x => x.Member)
-                .WithMany(x => x.MemberMemberships)
+                .WithMany(x => x.Memberships)
                 .HasForeignKey(x => x.MemberId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasOne(x => x.Package)
-                .WithMany(x => x.MemberMemberships)
+                .WithMany(x => x.Memberships)
                 .HasForeignKey(x => x.PackageId)
                 .OnDelete(DeleteBehavior.Restrict);
 
@@ -538,7 +538,7 @@ public class AppDbContext: DbContext
                 .HasForeignKey(x => x.ReceptionistId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasOne(x => x.MemberMembership)
+            builder.HasOne(x => x.Membership)
                 .WithOne(x => x.Invoice)
                 .HasForeignKey<Invoice>(x => x.MemberMembershipId)
                 .OnDelete(DeleteBehavior.Restrict);

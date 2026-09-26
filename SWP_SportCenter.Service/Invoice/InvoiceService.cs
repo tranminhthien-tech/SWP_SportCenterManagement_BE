@@ -4,17 +4,21 @@ using SWP_SportCenter.Repository.Enum;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 
 namespace SWP_SportCenter.Service.Invoice;
 
 public class InvoiceService : IInvoiceService
 {
     private readonly AppDbContext _context;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public InvoiceService(AppDbContext context)
+    public InvoiceService(AppDbContext context, IHttpContextAccessor httpContextAccessor)
     {
         _context = context;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<IEnumerable<Response.InvoiceResponse>> GetAllAsync()
@@ -22,16 +26,16 @@ public class InvoiceService : IInvoiceService
         return await _context.Invoices
             .AsNoTracking()
             .Include(i => i.Receptionist)
-            .Include(i => i.MemberMembership).ThenInclude(mm => mm.Member)
-            .Include(i => i.MemberMembership).ThenInclude(mm => mm.Package)
+            .Include(i => i.Membership).ThenInclude(mm => mm.Member)
+            .Include(i => i.Membership).ThenInclude(mm => mm.Package)
             .Select(i => new Response.InvoiceResponse
             {
                 Id = i.Id,
                 ReceptionistId = i.ReceptionistId,
                 ReceptionistName = i.Receptionist != null ? i.Receptionist.FullName : string.Empty,
                 MemberMembershipId = i.MemberMembershipId,
-                MemberName = i.MemberMembership != null && i.MemberMembership.Member != null ? i.MemberMembership.Member.FullName : string.Empty,
-                PackageName = i.MemberMembership != null && i.MemberMembership.Package != null ? i.MemberMembership.Package.PackageName : string.Empty,
+                MemberName = i.Membership != null && i.Membership.Member != null ? i.Membership.Member.FullName : string.Empty,
+                PackageName = i.Membership != null && i.Membership.Package != null ? i.Membership.Package.PackageName : string.Empty,
                 Amount = i.Amount,
                 PaymentMethod = i.PaymentMethod,
                 PaymentDate = i.PaymentDate,
@@ -45,8 +49,8 @@ public class InvoiceService : IInvoiceService
         var invoice = await _context.Invoices
             .AsNoTracking()
             .Include(i => i.Receptionist)
-            .Include(i => i.MemberMembership).ThenInclude(mm => mm.Member)
-            .Include(i => i.MemberMembership).ThenInclude(mm => mm.Package)
+            .Include(i => i.Membership).ThenInclude(mm => mm.Member)
+            .Include(i => i.Membership).ThenInclude(mm => mm.Package)
             .FirstOrDefaultAsync(i => i.Id == id);
 
         if (invoice == null) return null;
@@ -57,8 +61,8 @@ public class InvoiceService : IInvoiceService
             ReceptionistId = invoice.ReceptionistId,
             ReceptionistName = invoice.Receptionist != null ? invoice.Receptionist.FullName : string.Empty,
             MemberMembershipId = invoice.MemberMembershipId,
-            MemberName = invoice.MemberMembership != null && invoice.MemberMembership.Member != null ? invoice.MemberMembership.Member.FullName : string.Empty,
-            PackageName = invoice.MemberMembership != null && invoice.MemberMembership.Package != null ? invoice.MemberMembership.Package.PackageName : string.Empty,
+            MemberName = invoice.Membership != null && invoice.Membership.Member != null ? invoice.Membership.Member.FullName : string.Empty,
+            PackageName = invoice.Membership != null && invoice.Membership.Package != null ? invoice.Membership.Package.PackageName : string.Empty,
             Amount = invoice.Amount,
             PaymentMethod = invoice.PaymentMethod,
             PaymentDate = invoice.PaymentDate,
@@ -71,7 +75,7 @@ public class InvoiceService : IInvoiceService
         var receptionistExists = await _context.Receptionists.AnyAsync(r => r.Id == request.ReceptionistId);
         if (!receptionistExists) throw new Exception("Lễ tân (Receptionist) không tồn tại.");
 
-        var memberMembershipExists = await _context.MemberMemberships.AnyAsync(mm => mm.Id == request.MemberMembershipId);
+        var memberMembershipExists = await _context.Memberships.AnyAsync(mm => mm.Id == request.MemberMembershipId);
         if (!memberMembershipExists) throw new Exception("Lượt đăng ký gói tập không tồn tại.");
 
         // Bảng Invoice và MemberMembership có quan hệ 1-1 (1 lượt đăng ký chỉ có 1 hóa đơn)
@@ -128,5 +132,65 @@ public class InvoiceService : IInvoiceService
         await _context.SaveChangesAsync();
         
         return true;
+    }
+    // Lấy danh sách hóa đơn của Member đang đăng nhập
+    public async Task<IEnumerable<Response.InvoiceResponse>>
+        GetMyInvoicesAsync()
+    {
+        // Lấy AccountId từ JWT Token
+        var accountIdClaim = _httpContextAccessor.HttpContext?
+            .User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(accountIdClaim, out var accountId))
+        {
+            throw new UnauthorizedAccessException(
+                "Không tìm thấy AccountId trong token.");
+        }
+
+        // Lấy hóa đơn thuộc về Member hiện tại
+        return await _context.Invoices
+            .AsNoTracking()
+            .Where(i =>
+                i.Membership != null &&
+                i.Membership.Member != null &&
+                i.Membership.Member.AccountId == accountId)
+            .Select(i => new Response.InvoiceResponse
+            {
+                Id = i.Id,
+                ReceptionistId = i.ReceptionistId,
+                ReceptionistName = i.Receptionist != null
+                    ? i.Receptionist.FullName
+                    : string.Empty,
+
+                MemberMembershipId = i.MemberMembershipId,
+
+                MemberName = i.Membership != null &&
+                             i.Membership.Member != null
+                    ? i.Membership.Member.FullName
+                    : string.Empty,
+
+                PackageName = i.Membership != null &&
+                              i.Membership.Package != null
+                    ? i.Membership.Package.PackageName
+                    : string.Empty,
+
+                Amount = i.Amount,
+                PaymentMethod = i.PaymentMethod,
+                PaymentDate = i.PaymentDate,
+                Status = i.Status
+            })
+            .ToListAsync();
+    }
+
+
+// Lấy dữ liệu hóa đơn để phục vụ xuất/in
+    public async Task<Response.InvoiceResponse?> ExportAsync(Guid id)
+    {
+        var invoice = await GetByIdAsync(id);
+
+        if (invoice == null)
+            return null;
+
+        return invoice;
     }
 }

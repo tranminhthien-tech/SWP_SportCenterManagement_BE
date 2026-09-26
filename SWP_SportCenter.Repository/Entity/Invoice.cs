@@ -21,7 +21,7 @@ public class Invoice: BaseEntity, IAuditableEntity
 
     public Receptionist Receptionist { get; set; } = null!;
 
-    public MemberMembership MemberMembership { get; set; } = null!;
+    public Membership Membership { get; set; } = null!;
     
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

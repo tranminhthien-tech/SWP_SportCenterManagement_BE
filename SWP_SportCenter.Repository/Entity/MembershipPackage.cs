@@ -17,8 +17,8 @@ public class MembershipPackage: BaseEntity, IAuditableEntity
     public MembershipStatus Status { get; set; }
 
     // Navigation
-    public ICollection<MemberMembership> MemberMemberships { get; set; }
-        = new List<MemberMembership>();
+    public ICollection<Membership> Memberships { get; set; }
+        = new List<Membership>();
     
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }

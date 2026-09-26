@@ -3,7 +3,7 @@ using SWP_SportCenter.Repository.Enum;
 
 namespace SWP_SportCenter.Repository.Entity;
 
-public class MemberMembership: BaseEntity, IAuditableEntity
+public class Membership: BaseEntity, IAuditableEntity
 {
     public Guid MemberId { get; set; }
 
