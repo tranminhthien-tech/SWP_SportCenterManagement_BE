@@ -25,8 +25,8 @@ public class Member: BaseEntity, IAuditableEntity
     public Guid AccountId { get; set; }
     public Account Account { get; set; } = null!;
 
-    public ICollection<MemberMembership> MemberMemberships { get; set; }
-        = new List<MemberMembership>();
+    public ICollection<Membership> Memberships { get; set; }
+        = new List<Membership>();
 
     public ICollection<ClassBooking> ClassBookings { get; set; }
         = new List<ClassBooking>();
