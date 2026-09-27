@@ -20,6 +20,11 @@ using SWP_SportCenter.Service.Attendance;
 using AthuService = SWP_SportCenter.Service.Athu;
 using SWP_SportCenter.Service.Jwt;
 
+
+Env.Load();
+
+var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -56,26 +61,21 @@ builder.Services.AddScoped<AthuService.IService, AthuService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
 
-Env.Load();
 
-var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
 
 var app = builder.Build();
 
-app.MapGet("/", () => Results.Redirect("/swagger"));
+
 
 // Configure the HTTP request pipeline.
 //test
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
+app.MapGet("/", () => Results.Redirect("/swagger"));
 app.Run();
