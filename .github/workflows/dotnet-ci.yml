@@ -55,5 +55,4 @@ jobs:
       - name: Trigger Render Deploy
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         run: |
-          curl --fail --silent --show-error \
-            "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          curl -f ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
