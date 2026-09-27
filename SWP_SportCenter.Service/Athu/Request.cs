@@ -15,12 +15,6 @@ public class Request
         public string Password { get; set; } = string.Empty;
 
         // Thông tin hồ sơ Member
-        public string FullName { get; set; } = string.Empty;
-        public DateOnly? Dob { get; set; }
-        public string? Gender { get; set; }
-        public string? Phone { get; set; }
-        public string? Avatar { get; set; }
-        public string? TrainingGoal { get; set; }
     }
 
     // Gửi yêu cầu quên mật khẩu
