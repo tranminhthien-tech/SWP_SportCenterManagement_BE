@@ -17,6 +17,7 @@ using SWP_SportCenter.Service.ClassBooking;
 using SWP_SportCenter.Service.CenterManager;
 using SWP_SportCenter.Service.AuditLog;
 using SWP_SportCenter.Service.Attendance;
+using AthuService = SWP_SportCenter.Service.Athu;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,8 @@ builder.Services.AddScoped<IClassBookingService, ClassBookingService>();
 builder.Services.AddScoped<ICenterManagerService, CenterManagerService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
+builder.Services.AddScoped<AthuService.IService, AthuService.IService>();
+
 
 var app = builder.Build();
 

@@ -6,8 +6,12 @@ namespace SWP_SportCenter.Repository.Entity;
 public class Account: BaseEntity, IAuditableEntity
 {
     public string Username { get; set; } = string.Empty;
+    
+    public string Email { get; set; } = string.Empty;
 
     public string Password { get; set; } = string.Empty;
+
+    public bool IsVerify { get; set; } = false;
 
     public AccountRole Role { get; set; }
 
