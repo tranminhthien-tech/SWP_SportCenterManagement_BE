@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository;
-
+using DotNetEnv;
 
 using MemberService = SWP_SportCenter.Service.Member;
 using MembershipService = SWP_SportCenter.Service.Membership;
@@ -56,8 +56,14 @@ builder.Services.AddScoped<AthuService.IService, AthuService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
 
+Env.Load();
+
+var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
+
 var app = builder.Build();
 
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 // Configure the HTTP request pipeline.
 //test
