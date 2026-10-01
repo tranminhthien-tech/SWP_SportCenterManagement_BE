@@ -163,7 +163,7 @@ public class Service:IService
 
         return new Base.Response.PageResult<Response.TrainingResultResponse>
         {
-            Items = trainingResults,
+            Data = trainingResults,
             TotalItems = totalItems,
             PageSize = pageSize,
             PageIndex = pageIndex
@@ -236,7 +236,7 @@ public class Service:IService
 
         return new Base.Response.PageResult<Response.TrainingResultResponse>
         {
-            Items = trainingResults,
+            Data = trainingResults,
             TotalItems = totalItems,
             PageSize = pageSize,
             PageIndex = pageIndex

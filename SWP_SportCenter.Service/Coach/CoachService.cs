@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SWP_SportCenter.Repository.Enum;
 
 namespace SWP_SportCenter.Service.Coach;
 
@@ -52,8 +53,17 @@ public class CoachService : ICoachService
 
     public async Task<Response.CoachResponse> CreateAsync(Request.CreateCoachRequest request)
     {
-        var isAccountExist = await _context.Accounts.AnyAsync(a => a.Id == request.AccountId);
-        if (!isAccountExist) throw new Exception("Tài khoản (Account) không tồn tại.");
+        var account = await _context.Accounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+
+        if (account == null)
+            throw new Exception(
+                "Tài khoản (Account) không tồn tại.");
+
+        if (account.Role != AccountRole.Coach)
+            throw new Exception(
+                "Tài khoản này không có vai trò Huấn luyện viên (Coach).");
 
         var isProfileExist = await _context.Coaches.AnyAsync(c => c.AccountId == request.AccountId);
         if (isProfileExist) throw new Exception("Tài khoản này đã có hồ sơ Huấn luyện viên.");
@@ -70,8 +80,8 @@ public class CoachService : ICoachService
             FullName = request.FullName,
             Phone = request.Phone,
             Email = request.Email,
-            Avatar = request.Avatar,
-            Specialization = request.Specialization,
+            Avatar = request.Avatar ?? string.Empty,
+            Specialization = request.Specialization ?? string.Empty,
             ExperienceYears = request.ExperienceYears
         };
 
@@ -95,8 +105,8 @@ public class CoachService : ICoachService
         coach.FullName = request.FullName;
         coach.Phone = request.Phone;
         coach.Email = request.Email;
-        coach.Avatar = request.Avatar;
-        coach.Specialization = request.Specialization;
+        coach.Avatar = request.Avatar ?? string.Empty;
+        coach.Specialization = request.Specialization ?? string.Empty;
         coach.ExperienceYears = request.ExperienceYears;
 
         _context.Coaches.Update(coach);
@@ -112,7 +122,15 @@ public class CoachService : ICoachService
 
         var hasClasses = await _context.Classes.AnyAsync(c => c.CoachId == id);
         if (hasClasses) throw new Exception("Không thể xóa Huấn luyện viên này vì họ đang phụ trách các lớp học.");
+        var hasTrainingData =
+            await _context.TrainingPlans.AnyAsync(p => p.CoachId == id)
+            || await _context.TrainingResults.AnyAsync(r => r.CoachId == id);
 
+        if (hasTrainingData)
+        {
+            throw new Exception(
+                "Không thể xóa Huấn luyện viên này vì đã có kế hoạch/kết quả tập luyện.");
+        }
         _context.Coaches.Remove(coach);
         await _context.SaveChangesAsync();
         return true;

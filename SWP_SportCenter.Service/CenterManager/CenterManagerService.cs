@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SWP_SportCenter.Repository.Enum;
 
 namespace SWP_SportCenter.Service.CenterManager;
 
@@ -50,8 +51,17 @@ public class CenterManagerService : ICenterManagerService
     public async Task<Response.CenterManagerResponse> CreateAsync(Request.CreateCenterManagerRequest request)
     {
         // Kiểm tra ràng buộc
-        var isAccountExist = await _context.Accounts.AnyAsync(a => a.Id == request.AccountId);
-        if (!isAccountExist) throw new Exception("Tài khoản (Account) không tồn tại.");
+        var account = await _context.Accounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+
+        if (account == null)
+            throw new Exception(
+                "Tài khoản (Account) không tồn tại.");
+
+        if (account.Role != AccountRole.CenterManager)
+            throw new Exception(
+                "Tài khoản này không có vai trò Quản lý trung tâm (Center Manager).");
 
         var isProfileExist = await _context.CenterManagers.AnyAsync(cm => cm.AccountId == request.AccountId);
         if (isProfileExist) throw new Exception("Tài khoản này đã có hồ sơ Quản lý trung tâm.");

@@ -61,7 +61,25 @@ builder.Services.AddScoped<AthuService.IService, AthuService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
 
+var allowedOrigins = builder.Configuration
+                         .GetSection("Cors:AllowedOrigins")
+                         .Get<string[]>()
+                     ?? new[]
+                     {
+                         "http://localhost:5173",
+                         "http://127.0.0.1:5173"
+                     };
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontEnd", policy =>
+    {
+        policy
+            .WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 var app = builder.Build();
 
@@ -72,6 +90,8 @@ var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
+
+app.UseCors("FrontEnd"); 
 
 app.UseAuthentication();
 app.UseAuthorization();

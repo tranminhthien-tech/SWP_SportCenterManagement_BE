@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using SWP_SportCenter.Repository.Enum;
 
 namespace SWP_SportCenter.Service.ClassSession;
 
@@ -16,7 +17,7 @@ public class ClassSessionService : IClassSessionService
         _context = context;
     }
 
-    public async Task<IEnumerable<Response.ClassSessionResponse>> GetAllAsync()
+    public async Task<List<Response.ClassSessionResponse>> GetAllAsync()
     {
         return await _context.ClassSessions
             .AsNoTracking()
@@ -36,7 +37,7 @@ public class ClassSessionService : IClassSessionService
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<Response.ClassSessionResponse>> GetByClassIdAsync(Guid classId)
+    public async Task<List<Response.ClassSessionResponse>> GetByClassIdAsync(Guid classId)
     {
         return await _context.ClassSessions
             .AsNoTracking()
@@ -140,30 +141,84 @@ public class ClassSessionService : IClassSessionService
     // ==========================================
     // HÀM HỖ TRỢ KIỂM TRA RÀNG BUỘC NGHIỆP VỤ
     // ==========================================
-    private async Task ValidateSessionLogicAsync(Guid classId, Guid roomId, DateTime date, TimeSpan startTime, TimeSpan endTime, Guid? currentSessionId = null)
+   private async Task ValidateSessionLogicAsync(
+    Guid classId,
+    Guid roomId,
+    DateTime date,
+    TimeSpan startTime,
+    TimeSpan endTime,
+    Guid? currentSessionId = null)
+{
+    if (startTime >= endTime)
+        throw new Exception(
+            "Thời gian kết thúc phải lớn hơn thời gian bắt đầu.");
+
+    // 1. Kiểm tra Lớp học có tồn tại
+    // và ngày học có nằm trong giai đoạn mở lớp không
+    var classEntity = await _context.Classes
+        .AsNoTracking()
+        .FirstOrDefaultAsync(c => c.Id == classId);
+
+    if (classEntity == null)
+        throw new Exception("Lớp học không tồn tại.");
+
+    if (date.Date < classEntity.StartDate.Date ||
+        date.Date > classEntity.EndDate.Date)
     {
-        if (startTime >= endTime)
-            throw new Exception("Thời gian kết thúc phải lớn hơn thời gian bắt đầu.");
-
-        // 1. Kiểm tra Lớp học có tồn tại và ngày học có nằm trong giai đoạn mở lớp không
-        var classEntity = await _context.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId);
-        if (classEntity == null) throw new Exception("Lớp học không tồn tại.");
-
-        if (date.Date < classEntity.StartDate.Date || date.Date > classEntity.EndDate.Date)
-            throw new Exception($"Ngày xếp lịch phải nằm trong khoảng thời gian diễn ra lớp học ({classEntity.StartDate:dd/MM/yyyy} - {classEntity.EndDate:dd/MM/yyyy}).");
-
-        // 2. Kiểm tra Phòng tập có khả dụng không (không bị trùng lịch với lớp khác)
-        var conflictingSession = await _context.ClassSessions
-            .AsNoTracking()
-            .Where(cs => cs.RoomId == roomId && cs.Date.Date == date.Date)
-            .Where(cs => currentSessionId == null || cs.Id != currentSessionId) // Bỏ qua chính nó khi Update
-            .FirstOrDefaultAsync(cs => (startTime >= cs.StartTime && startTime < cs.EndTime) || 
-                                       (endTime > cs.StartTime && endTime <= cs.EndTime) || 
-                                       (startTime <= cs.StartTime && endTime >= cs.EndTime));
-                                       
-        if (conflictingSession != null)
-        {
-            throw new Exception($"Phòng tập đã có lịch sử dụng từ {conflictingSession.StartTime:hh\\:mm} đến {conflictingSession.EndTime:hh\\:mm} vào ngày này.");
-        }
+        throw new Exception(
+            $"Ngày xếp lịch phải nằm trong khoảng thời gian diễn ra lớp học " +
+            $"({classEntity.StartDate:dd/MM/yyyy} - " +
+            $"{classEntity.EndDate:dd/MM/yyyy}).");
     }
+
+    // 2. Kiểm tra Phòng tập có tồn tại không
+    var room = await _context.Rooms
+        .AsNoTracking()
+        .FirstOrDefaultAsync(r => r.Id == roomId);
+
+    if (room == null)
+        throw new Exception("Phòng tập không tồn tại.");
+
+    // 3. Kiểm tra Phòng tập có đang khả dụng không
+    if (room.Status != RoomStatus.Available)
+    {
+        throw new Exception(
+            $"Phòng tập \"{room.RoomName}\" đang tạm ngưng sử dụng.");
+    }
+
+    // 4. Xác định khoảng thời gian của ngày cần kiểm tra
+    var dayStart = DateTime.SpecifyKind(
+        date.Date,
+        DateTimeKind.Utc);
+
+    var dayEnd = dayStart.AddDays(1);
+
+    // 5. Kiểm tra phòng có bị trùng lịch không
+    var conflictingSession = await _context.ClassSessions
+        .AsNoTracking()
+        .Where(cs =>
+            cs.RoomId == roomId &&
+            cs.Date >= dayStart &&
+            cs.Date < dayEnd)
+        .Where(cs =>
+            currentSessionId == null ||
+            cs.Id != currentSessionId)
+        .FirstOrDefaultAsync(cs =>
+            (startTime >= cs.StartTime &&
+             startTime < cs.EndTime) ||
+
+            (endTime > cs.StartTime &&
+             endTime <= cs.EndTime) ||
+
+            (startTime <= cs.StartTime &&
+             endTime >= cs.EndTime));
+
+    if (conflictingSession != null)
+    {
+        throw new Exception(
+            $"Phòng tập đã có lịch sử dụng từ " +
+            $"{conflictingSession.StartTime:hh\\:mm} đến " +
+            $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");
+    }
+}
 }

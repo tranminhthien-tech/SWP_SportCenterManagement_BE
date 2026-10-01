@@ -87,6 +87,9 @@ public class ClassService : IClassService
             EndDate = request.EndDate,
             Status = request.Status
         };
+        await ValidateReferencesAsync(
+            request.CategoryId,
+            request.CoachId);
 
         _context.Classes.Add(newClass);
         await _context.SaveChangesAsync();
@@ -105,6 +108,10 @@ public class ClassService : IClassService
         var classEntity = await _context.Classes.FindAsync(id);
         if (classEntity == null) return false;
 
+        await ValidateReferencesAsync(
+            request.CategoryId,
+            request.CoachId);
+        
         classEntity.ClassName = request.ClassName;
         classEntity.CategoryId = request.CategoryId;
         classEntity.CoachId = request.CoachId;
@@ -114,9 +121,10 @@ public class ClassService : IClassService
         classEntity.Status = request.Status;
         classEntity.UpdatedAt = DateTimeOffset.UtcNow;
 
+        
         _context.Classes.Update(classEntity);
         await _context.SaveChangesAsync();
-
+        
         return true;
     }
 
@@ -157,5 +165,21 @@ public class ClassService : IClassService
                 BookingDate = cb.BookingDate
             })
             .ToListAsync();
+    }
+    private async Task ValidateReferencesAsync(
+        Guid categoryId,
+        Guid coachId)
+    {
+        if (!await _context.SportCategories
+                .AnyAsync(c => c.Id == categoryId))
+        {
+            throw new Exception("Bộ môn không tồn tại.");
+        }
+
+        if (!await _context.Coaches
+                .AnyAsync(c => c.Id == coachId))
+        {
+            throw new Exception("Huấn luyện viên không tồn tại.");
+        }
     }
 }
