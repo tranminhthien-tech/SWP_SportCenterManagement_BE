@@ -62,6 +62,12 @@ public class ClassBookingService : IClassBookingService
             
         if (currentBookingsCount >= classEntity.MaxCapacity)
             throw new Exception("Lớp học đã đạt số lượng học viên tối đa.");
+        
+        if (!await _context.Members
+                .AnyAsync(m => m.Id == request.MemberId))
+        {
+            throw new Exception("Học viên không tồn tại.");
+        }
 
         // 4. Tiến hành lưu đăng ký
         var newBooking = new Repository.Entity.ClassBooking

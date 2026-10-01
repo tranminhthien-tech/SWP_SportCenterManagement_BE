@@ -59,7 +59,7 @@ public class Service: IService
 
         return new Base.Response.PageResult<Response.MemberResponse>
         {
-            Items = items,
+            Data = items,
             TotalItems = totalItems,
             PageSize = pageSize,
             PageIndex = pageIndex

@@ -55,7 +55,7 @@ public class Service: IService
         var result =
             new Base.Response.PageResult<Response.MembershipPackageResponse>
             {
-                Items = listResult,
+                Data = listResult,
                 PageIndex = pageIndex,
                 PageSize = pageSize,
                 TotalItems = totalItems

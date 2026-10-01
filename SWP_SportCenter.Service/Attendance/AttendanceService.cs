@@ -95,6 +95,10 @@ public class AttendanceService : IAttendanceService
 
         _context.Attendances.Add(newAttendance);
         await _context.SaveChangesAsync();
+        
+        await SyncBookingStatusAsync(
+            request.MemberId,
+            session.ClassId);
 
         var savedAttendance = await _context.Attendances
             .Include(a => a.Member)
@@ -125,7 +129,46 @@ public class AttendanceService : IAttendanceService
         
         _context.Attendances.Update(attendance);
         await _context.SaveChangesAsync();
+        
+        var session = await _context.ClassSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == attendance.SessionId);
+
+        if (session != null)
+        {
+            await SyncBookingStatusAsync(
+                attendance.MemberId,
+                session.ClassId);
+        }
 
         return true;
+    }
+    private async Task SyncBookingStatusAsync(Guid memberId, Guid classId)
+    {
+        var booking = await _context.ClassBookings
+            .FirstOrDefaultAsync(cb =>
+                cb.MemberId == memberId &&
+                cb.ClassId == classId);
+
+        if (booking == null ||
+            booking.Status == BookingStatus.Cancelled)
+            return;
+
+        var hasAttended = await _context.Attendances
+            .AnyAsync(a =>
+                a.MemberId == memberId &&
+                a.Session.ClassId == classId &&
+                (a.Status == AttendanceStatus.Present ||
+                 a.Status == AttendanceStatus.Late));
+
+        var newStatus = hasAttended
+            ? BookingStatus.Attended
+            : BookingStatus.Booked;
+
+        if (booking.Status != newStatus)
+        {
+            booking.Status = newStatus;
+            await _context.SaveChangesAsync();
+        }
     }
 }

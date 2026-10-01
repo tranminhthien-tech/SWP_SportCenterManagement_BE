@@ -109,7 +109,7 @@ public class Service: IService
 
         return new Base.Response.PageResult<Response.MembershipResponse>
         {
-            Items = memberships,
+            Data = memberships,
             TotalItems = totalItems,
             PageSize = pageSize,
             PageIndex = pageIndex
@@ -168,7 +168,7 @@ public class Service: IService
 
         return new Base.Response.PageResult<Response.MembershipResponse>
         {
-            Items = memberships,
+            Data = memberships,
             TotalItems = totalItems,
             PageSize = pageSize,
             PageIndex = pageIndex
