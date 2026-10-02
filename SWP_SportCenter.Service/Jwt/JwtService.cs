@@ -8,11 +8,11 @@ namespace SWP_SportCenter.Service.Jwt;
 
 public class JwtService: IJwtService
 {
-    private readonly Jwtoption _jwtOption = new();
+    private readonly JwtOptions _jwtOption = new();
 
     public JwtService(IConfiguration configuration)
     {
-        configuration.GetSection(nameof(Jwtoption)).Bind(_jwtOption);
+        configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
     }
     public string GenerateAccessToken(IEnumerable<Claim> claims)
     {

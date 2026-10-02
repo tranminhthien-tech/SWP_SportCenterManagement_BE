@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace SWP_SportCenter.Service.Jwt;
 
-public class Jwtoption
+public class JwtOptions
 {
     [Required] public string Issuer { get; set; }
     [Required] public string Audience { get; set; }

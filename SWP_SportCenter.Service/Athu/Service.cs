@@ -15,14 +15,14 @@ public class Service: IService
     
     private readonly IJwtService _jwtService;
     private readonly AppDbContext _dbContext;
-    private readonly Jwtoption _jwtOption = new();
+    private readonly JwtOptions _jwtOption = new();
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public Service(IJwtService jwtService, AppDbContext dbContext, IConfiguration configuration, IHttpContextAccessor httpContextAccessor)
     {
         _jwtService = jwtService;
         _dbContext = dbContext;
-        configuration.GetSection(nameof(Jwtoption)).Bind(_jwtOption);
+        configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
         _httpContextAccessor = httpContextAccessor;
     }
     public async Task<Response.IdentityResponse> Login(Request.LoginRequest request)
