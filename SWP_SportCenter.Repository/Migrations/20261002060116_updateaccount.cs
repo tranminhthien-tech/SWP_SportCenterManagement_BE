@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace SWP_SportCenter.Repository.Migrations
 {
     /// <inheritdoc />
-    public partial class updateacount : Migration
+    public partial class updateaccount : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,10 +18,10 @@ namespace SWP_SportCenter.Repository.Migrations
                 columns: new[] { "account_id", "created_at", "Email", "IsDeleted", "IsVerify", "password", "role", "status", "updated_at", "username" },
                 values: new object[,]
                 {
-                    { new Guid("11111111-1111-1111-1111-111111111111"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "member@demo.com", false, true, "123456", 1, 1, null, "demo_member" },
-                    { new Guid("22222222-2222-2222-2222-222222222222"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "coach@demo.com", false, true, "123456", 2, 1, null, "demo_coach" },
-                    { new Guid("33333333-3333-3333-3333-333333333333"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "receptionist@demo.com", false, true, "123456", 3, 1, null, "demo_receptionist" },
-                    { new Guid("44444444-4444-4444-4444-444444444444"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "manager@demo.com", false, true, "123456", 4, 1, null, "demo_manager" }
+                    { new Guid("11111111-1111-1111-1111-111111111111"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "member@demo.com", false, true, "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==", 1, 1, null, "demo_member" },
+                    { new Guid("22222222-2222-2222-2222-222222222222"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "coach@demo.com", false, true, "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==", 2, 1, null, "demo_coach" },
+                    { new Guid("33333333-3333-3333-3333-333333333333"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "receptionist@demo.com", false, true, "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==", 3, 1, null, "demo_receptionist" },
+                    { new Guid("44444444-4444-4444-4444-444444444444"), new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)), "manager@demo.com", false, true, "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==", 4, 1, null, "demo_manager" }
                 });
         }
 

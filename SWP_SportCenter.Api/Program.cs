@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository;
 using DotNetEnv;
-
+using SWP_SportCenter.Service.Until;
 using MemberService = SWP_SportCenter.Service.Member;
 using MembershipService = SWP_SportCenter.Service.Membership;
 using MembershipPackageService = SWP_SportCenter.Service.MembershipPackage;
@@ -27,6 +27,10 @@ var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
 Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
 var builder = WebApplication.CreateBuilder(args);
 
+Console.WriteLine("========================================");
+Console.WriteLine("DEMO PASSWORD HASH:");
+Console.WriteLine(Argon2Hasher.HashPassword("123456"));
+Console.WriteLine("========================================");
 // Add services to the container.
 
 builder.Services.AddControllers();

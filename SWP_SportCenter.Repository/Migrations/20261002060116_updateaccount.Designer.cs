@@ -12,8 +12,8 @@ using SWP_SportCenter.Repository;
 namespace SWP_SportCenter.Repository.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261002053439_updateacount")]
-    partial class updateacount
+    [Migration("20261002060116_updateaccount")]
+    partial class updateaccount
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -92,7 +92,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "member@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 1,
                             Status = 1,
                             Username = "demo_member"
@@ -104,7 +104,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "coach@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
                             Status = 1,
                             Username = "demo_coach"
@@ -116,7 +116,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "receptionist@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 3,
                             Status = 1,
                             Username = "demo_receptionist"
@@ -128,7 +128,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "manager@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 4,
                             Status = 1,
                             Username = "demo_manager"
