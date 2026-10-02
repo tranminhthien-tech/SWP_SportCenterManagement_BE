@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository.Abstraction;
 using SWP_SportCenter.Repository.Entity;
+using SWP_SportCenter.Repository.Enum;
 
 namespace SWP_SportCenter.Repository;
 
@@ -1029,5 +1030,59 @@ public class AppDbContext: DbContext
 
             builder.HasIndex(x => x.Status);
         });
+        // =========================================================
+// DEMO ACCOUNTS
+// =========================================================
+
+        modelBuilder.Entity<Account>().HasData(
+            new Account
+            {
+                Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                Username = "demo_member",
+                Email = "member@demo.com",
+                Password = "123456",
+                IsVerify = true,
+                Role = AccountRole.Member,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 2, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                Username = "demo_coach",
+                Email = "coach@demo.com",
+                Password = "123456",
+                IsVerify = true,
+                Role = AccountRole.Coach,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 2, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+                Username = "demo_receptionist",
+                Email = "receptionist@demo.com",
+                Password = "123456",
+                IsVerify = true,
+                Role = AccountRole.Receptionist,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 2, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                Username = "demo_manager",
+                Email = "manager@demo.com",
+                Password = "123456",
+                IsVerify = true,
+                Role = AccountRole.CenterManager,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 2, 0, 0, 0, TimeSpan.Zero)
+            }
+        );
     }
 }
