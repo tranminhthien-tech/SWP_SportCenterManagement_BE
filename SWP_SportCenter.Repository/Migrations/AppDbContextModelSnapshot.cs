@@ -89,7 +89,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "member@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 1,
                             Status = 1,
                             Username = "demo_member"
@@ -101,7 +101,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "coach@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
                             Status = 1,
                             Username = "demo_coach"
@@ -113,7 +113,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "receptionist@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 3,
                             Status = 1,
                             Username = "demo_receptionist"
@@ -125,7 +125,7 @@ namespace SWP_SportCenter.Repository.Migrations
                             Email = "manager@demo.com",
                             IsDeleted = false,
                             IsVerify = true,
-                            Password = "123456",
+                            Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 4,
                             Status = 1,
                             Username = "demo_manager"
