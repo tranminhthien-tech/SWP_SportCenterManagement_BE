@@ -14,6 +14,28 @@ public class MembershipController : ControllerBase
         _service = membershipService;
     }
 
+    // GET /api/memberships
+    // Lễ tân/quản lý lấy danh sách membership tổng quát, có phân trang và bộ lọc.
+    [HttpGet("memberships")]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? searchTerm,
+        [FromQuery] SWP_SportCenter.Repository.Enum.MembershipStatus? status,
+        [FromQuery] Guid? memberId,
+        [FromQuery] Guid? packageId,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] int pageIndex = 1)
+    {
+        var result = await _service.GetAllAsync(
+            searchTerm,
+            status,
+            memberId,
+            packageId,
+            pageSize,
+            pageIndex);
+
+        return Ok(result);
+    }
+
     // GET /api/members/me/memberships
     // Lấy danh sách Membership của Member đang đăng nhập
     [HttpGet("members/me/memberships")]

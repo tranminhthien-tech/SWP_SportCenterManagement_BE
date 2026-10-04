@@ -13,6 +13,9 @@ public class JwtService: IJwtService
     public JwtService(IConfiguration configuration)
     {
         configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
+        Console.WriteLine($"JWT Secret Length: {_jwtOption.SecretKey?.Length}");
+        Console.WriteLine($"JWT Issuer: {_jwtOption.Issuer}");
+        Console.WriteLine($"JWT Audience: {_jwtOption.Audience}");
     }
     public string GenerateAccessToken(IEnumerable<Claim> claims)
     {

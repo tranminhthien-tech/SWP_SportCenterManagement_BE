@@ -2,6 +2,17 @@ namespace SWP_SportCenter.Service.Membership;
 
 public interface IService
 {
+    // GET: /api/memberships
+    // Lấy danh sách membership tổng quát cho lễ tân/quản lý
+    public Task<Base.Response.PageResult<Response.MembershipResponse>>
+        GetAllAsync(
+            string? searchTerm,
+            Repository.Enum.MembershipStatus? status,
+            Guid? memberId,
+            Guid? packageId,
+            int pageSize,
+            int pageIndex);
+
     // GET: /api/members/me/memberships
     // Lấy danh sách gói của member đang đăng nhập
     public Task<Base.Response.PageResult<Response.MembershipResponse>>

@@ -10,6 +10,8 @@ public class Response
 
         public Guid MemberId { get; set; }
 
+        public string MemberName { get; set; } = string.Empty;
+
         public Guid PackageId { get; set; }
 
         public string PackageName { get; set; } = string.Empty;
