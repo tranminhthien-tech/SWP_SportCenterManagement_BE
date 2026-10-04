@@ -17,6 +17,8 @@ using SWP_SportCenter.Service.ClassBooking;
 using SWP_SportCenter.Service.CenterManager;
 using SWP_SportCenter.Service.AuditLog;
 using SWP_SportCenter.Service.Attendance;
+using SWP_SportCenter.Service.Receptionist;
+using SWP_SportCenter.Service.Accounts;
 using AthuService = SWP_SportCenter.Service.Athu;
 using SWP_SportCenter.Service.Jwt;
 
@@ -61,6 +63,8 @@ builder.Services.AddScoped<IClassBookingService, ClassBookingService>();
 builder.Services.AddScoped<ICenterManagerService, CenterManagerService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
+builder.Services.AddScoped<IReceptionistService, ReceptionistService>();
+builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<AthuService.IService, AthuService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
