@@ -12,4 +12,6 @@ public interface IAccountService
         int pageIndex);
 
     Task<Response.AccountResponse?> GetByIdAsync(Guid id);
+    Task<bool> UpdateAsync(Guid id, Request.UpdateAccountRequest request);
+    Task<bool> SoftDeleteAsync(Guid id);
 }

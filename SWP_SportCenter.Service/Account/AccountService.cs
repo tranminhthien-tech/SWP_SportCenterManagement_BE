@@ -26,7 +26,9 @@ public class AccountService : IAccountService
                 "PageSize and PageIndex must be greater than 0");
         }
 
-        var query = _dbContext.Accounts.AsNoTracking();
+        var query = _dbContext.Accounts
+            .AsNoTracking()
+            .Where(account => !account.IsDeleted);
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -77,7 +79,7 @@ public class AccountService : IAccountService
     {
         return await _dbContext.Accounts
             .AsNoTracking()
-            .Where(account => account.Id == id)
+            .Where(account => account.Id == id && !account.IsDeleted)
             .Select(account => new Response.AccountResponse
             {
                 AccountId = account.Id,
@@ -90,5 +92,66 @@ public class AccountService : IAccountService
                 UpdatedAt = account.UpdatedAt
             })
             .FirstOrDefaultAsync();
+    }
+
+    public async Task<bool> UpdateAsync(
+        Guid id,
+        Request.UpdateAccountRequest request)
+    {
+        var account = await _dbContext.Accounts
+            .FirstOrDefaultAsync(account =>
+                account.Id == id &&
+                !account.IsDeleted);
+
+        if (account == null)
+        {
+            return false;
+        }
+
+        var username = request.Username.Trim();
+        var email = request.Email.Trim();
+
+        var usernameExists = await _dbContext.Accounts.AnyAsync(other =>
+            other.Id != id &&
+            other.Username == username);
+        if (usernameExists)
+        {
+            throw new InvalidOperationException("Username đã được sử dụng.");
+        }
+
+        var emailExists = await _dbContext.Accounts.AnyAsync(other =>
+            other.Id != id &&
+            other.Email == email);
+        if (emailExists)
+        {
+            throw new InvalidOperationException("Email đã được sử dụng.");
+        }
+
+        account.Username = username;
+        account.Email = email;
+        account.Status = request.Status;
+        account.IsVerify = request.IsVerify;
+
+        await _dbContext.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<bool> SoftDeleteAsync(Guid id)
+    {
+        var account = await _dbContext.Accounts
+            .FirstOrDefaultAsync(account =>
+                account.Id == id &&
+                !account.IsDeleted);
+
+        if (account == null)
+        {
+            return false;
+        }
+
+        account.IsDeleted = true;
+        account.Status = AccountStatus.Inactive;
+
+        await _dbContext.SaveChangesAsync();
+        return true;
     }
 }

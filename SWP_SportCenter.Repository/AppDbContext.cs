@@ -1084,6 +1084,84 @@ public class AppDbContext: DbContext
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
                     2026, 10, 2, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                Username = "tran.thanh.binh",
+                Email = "binh.tran.yoga@sportcenter.com",
+                Password = demoPasswordHash,
+                IsVerify = true,
+                Role = AccountRole.Coach,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                Username = "nguyen.manh.hung",
+                Email = "hung.nguyen.fitness@sportcenter.com",
+                Password = demoPasswordHash,
+                IsVerify = true,
+                Role = AccountRole.Coach,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Account
+            {
+                Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                Username = "le.hoang.yen",
+                Email = "yen.le.swim@sportcenter.com",
+                Password = demoPasswordHash,
+                IsVerify = true,
+                Role = AccountRole.Coach,
+                Status = AccountStatus.Active,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
+            }
+        );
+
+        modelBuilder.Entity<Coach>().HasData(
+            new Coach
+            {
+                Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                AccountId = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                FullName = "Trần Thanh Bình",
+                Phone = "0901234567",
+                Email = "binh.tran.yoga@sportcenter.com",
+                Avatar = "",
+                Specialization = "Yoga Trị Liệu & Pilates",
+                ExperienceYears = 8,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Coach
+            {
+                Id = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                AccountId = Guid.Parse("66666666-6666-6666-6666-666666666666"),
+                FullName = "Nguyễn Mạnh Hùng",
+                Phone = "0987654321",
+                Email = "hung.nguyen.fitness@sportcenter.com",
+                Avatar = "",
+                Specialization = "Huấn luyện Thể hình & Ép mỡ cấp tốc",
+                ExperienceYears = 4,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
+            },
+            new Coach
+            {
+                Id = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                AccountId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                FullName = "Lê Hoàng Yến",
+                Phone = "0912345678",
+                Email = "yen.le.swim@sportcenter.com",
+                Avatar = "",
+                Specialization = "Bơi ếch, Bơi sải cơ bản cho trẻ em",
+                ExperienceYears = 1,
+                CreatedAt = new DateTimeOffset(
+                    2026, 10, 5, 0, 0, 0, TimeSpan.Zero)
             }
         );
     }
