@@ -29,7 +29,9 @@ public class Service: IService
     {
         // Tìm tài khoản bằng Email
         var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Email == request.Email);
+            .FirstOrDefaultAsync(a =>
+                a.Email == request.Email &&
+                !a.IsDeleted);
 
         if (account == null)
         {
@@ -157,7 +159,9 @@ public class Service: IService
         Request.LoginRequest request)
     {
         var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Email == request.Email);
+            .FirstOrDefaultAsync(a =>
+                a.Email == request.Email &&
+                !a.IsDeleted);
 
         if (account == null)
         {
@@ -233,7 +237,9 @@ public class Service: IService
         }
 
         var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Id == accountId);
+            .FirstOrDefaultAsync(a =>
+                a.Id == accountId &&
+                !a.IsDeleted);
 
         if (account == null)
         {

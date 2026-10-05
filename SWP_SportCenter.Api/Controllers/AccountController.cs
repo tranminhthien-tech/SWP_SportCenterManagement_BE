@@ -44,4 +44,28 @@ public class AccountController : ControllerBase
             ? NotFound("Không tìm thấy tài khoản.")
             : Ok(account);
     }
+
+    // PUT: api/accounts/{id}
+    // Cập nhật thông tin và trạng thái account. Password và role có API riêng để tránh ảnh hưởng hồ sơ liên quan.
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] Request.UpdateAccountRequest request)
+    {
+        var updated = await _accountService.UpdateAsync(id, request);
+        return updated
+            ? NoContent()
+            : NotFound("Không tìm thấy tài khoản.");
+    }
+
+    // DELETE: api/accounts/{id}
+    // Xóa mềm: IsDeleted=true và chuyển account sang Inactive.
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var deleted = await _accountService.SoftDeleteAsync(id);
+        return deleted
+            ? NoContent()
+            : NotFound("Không tìm thấy tài khoản.");
+    }
 }
