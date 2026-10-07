@@ -150,17 +150,17 @@ public class ClassService : IClassService
 
     public async Task<IEnumerable<Response.ClassMemberResponse>> GetMembersByClassIdAsync(Guid classId)
     {
-        // Join với bảng Member thông qua ClassBooking để lấy danh sách học viên
+        // Join với bảng Member thông qua ClassBooking
+        // Email được lấy từ Account của Member
         return await _context.ClassBookings
             .AsNoTracking()
-            .Include(cb => cb.Member)
             .Where(cb => cb.ClassId == classId)
             .Select(cb => new Response.ClassMemberResponse
             {
                 MemberId = cb.MemberId,
                 FullName = cb.Member.FullName,
                 Phone = cb.Member.Phone,
-                Email = cb.Member.Email,
+                Email = cb.Member.Account.Email,
                 BookingStatus = cb.Status,
                 BookingDate = cb.BookingDate
             })

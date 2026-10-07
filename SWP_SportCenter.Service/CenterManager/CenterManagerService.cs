@@ -27,7 +27,7 @@ public class CenterManagerService : ICenterManagerService
                 AccountId = cm.AccountId,
                 FullName = cm.FullName,
                 Phone = cm.Phone,
-                Email = cm.Email
+                Email = cm.Account.Email
             })
             .ToListAsync();
     }
@@ -69,7 +69,7 @@ public class CenterManagerService : ICenterManagerService
         var isPhoneExist = await _context.CenterManagers.AnyAsync(cm => cm.Phone == request.Phone);
         if (isPhoneExist) throw new Exception("Số điện thoại này đã được sử dụng.");
 
-        var isEmailExist = await _context.CenterManagers.AnyAsync(cm => cm.Email == request.Email);
+        var isEmailExist = await _context.CenterManagers.AnyAsync(cm => cm.Account.Email == request.Email);
         if (isEmailExist) throw new Exception("Email này đã được sử dụng.");
 
         var newManager = new Repository.Entity.CenterManager
@@ -77,7 +77,6 @@ public class CenterManagerService : ICenterManagerService
             AccountId = request.AccountId,
             FullName = request.FullName,
             Phone = request.Phone,
-            Email = request.Email
         };
 
         _context.CenterManagers.Add(newManager);
@@ -88,21 +87,39 @@ public class CenterManagerService : ICenterManagerService
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateCenterManagerRequest request)
     {
-        var manager = await _context.CenterManagers.FindAsync(id);
-        if (manager == null) return false;
+        // Lấy CenterManager kèm Account để cập nhật Email ở bảng Account
+        var manager = await _context.CenterManagers
+            .Include(cm => cm.Account)
+            .FirstOrDefaultAsync(cm => cm.Id == id);
 
-        // Kiểm tra trùng lặp thông tin với người khác
-        if (manager.Phone != request.Phone && await _context.CenterManagers.AnyAsync(cm => cm.Phone == request.Phone))
+        if (manager == null)
+            return false;
+
+        // Kiểm tra số điện thoại trùng với CenterManager khác
+        if (manager.Phone != request.Phone &&
+            await _context.CenterManagers.AnyAsync(cm =>
+                cm.Phone == request.Phone &&
+                cm.Id != id))
+        {
             throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+        }
 
-        if (manager.Email != request.Email && await _context.CenterManagers.AnyAsync(cm => cm.Email == request.Email))
+        // Kiểm tra Email trùng với Account khác
+        if (manager.Account.Email != request.Email &&
+            await _context.Accounts.AnyAsync(a =>
+                a.Email == request.Email &&
+                a.Id != manager.AccountId))
+        {
             throw new Exception("Email này đã được sử dụng bởi người khác.");
+        }
 
+        // Cập nhật thông tin CenterManager
         manager.FullName = request.FullName;
         manager.Phone = request.Phone;
-        manager.Email = request.Email;
 
-        _context.CenterManagers.Update(manager);
+        // Email nằm ở Account, KHÔNG còn nằm ở CenterManager
+        manager.Account.Email = request.Email;
+
         await _context.SaveChangesAsync();
 
         return true;
@@ -127,7 +144,7 @@ public class CenterManagerService : ICenterManagerService
             AccountId = manager.AccountId,
             FullName = manager.FullName,
             Phone = manager.Phone,
-            Email = manager.Email
+            Email = manager.Account.Email
         };
     }
 }

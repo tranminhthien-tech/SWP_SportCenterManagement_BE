@@ -58,12 +58,6 @@ public class Service: IService
                 "Account is not active");
         }
 
-        // Kiểm tra email đã xác minh OTP chưa
-        if (!account.IsVerify)
-        {
-            throw new UnauthorizedAccessException(
-                "Email has not been verified");
-        }
 
         // Tạo claims cho JWT
         var claims = new List<Claim>
@@ -93,7 +87,7 @@ public class Service: IService
         {
             Access_token = token,
             UserId = account.Id,
-            IsVerify = account.IsVerify
+
         };
 
         return result;
@@ -133,7 +127,6 @@ public class Service: IService
             Username = request.Username,
             Email = request.Email,
             Password = hashedPassword,
-            IsVerify = false,
             Role = AccountRole.Member,
             Status = AccountStatus.Active
         };
@@ -149,7 +142,6 @@ public class Service: IService
         {
             UserId = account.Id,
             Email = account.Email,
-            IsVerify = account.IsVerify,
             Message = "Registration successful"
         };
     }
@@ -186,12 +178,6 @@ public class Service: IService
                 "Account is not active");
         }
 
-        if (!account.IsVerify)
-        {
-            throw new UnauthorizedAccessException(
-                "Email has not been verified");
-        }
-
         var claims = new List<Claim>
         {
             new Claim(
@@ -217,7 +203,6 @@ public class Service: IService
         {
             Access_token = token,
             UserId = account.Id,
-            IsVerify = account.IsVerify
         };
     }
 
@@ -254,7 +239,6 @@ public class Service: IService
             Email = account.Email,
             Role = account.Role.ToString(),
             Status = account.Status.ToString(),
-            IsVerify = account.IsVerify
         };
     }
 
