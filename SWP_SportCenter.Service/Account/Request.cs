@@ -18,6 +18,6 @@ public class Request
 
         public AccountStatus Status { get; set; }
 
-        public bool IsVerify { get; set; }
+
     }
 }

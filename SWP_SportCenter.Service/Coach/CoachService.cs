@@ -27,7 +27,7 @@ public class CoachService : ICoachService
                 AccountId = c.AccountId,
                 FullName = c.FullName,
                 Phone = c.Phone,
-                Email = c.Email,
+                Email = c.Account.Email,
                 Avatar = c.Avatar,
                 Specialization = c.Specialization,
                 ExperienceYears = c.ExperienceYears
@@ -51,65 +51,111 @@ public class CoachService : ICoachService
         return MapToResponse(coach);
     }
 
-    public async Task<Response.CoachResponse> CreateAsync(Request.CreateCoachRequest request)
+    public async Task<Response.CoachResponse> CreateAsync(
+    Request.CreateCoachRequest request)
+{
+    // Lấy Account
+    var account = await _context.Accounts
+        .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+
+    if (account == null)
+        throw new Exception("Tài khoản (Account) không tồn tại.");
+
+    // Kiểm tra Role
+    if (account.Role != AccountRole.Coach)
+        throw new Exception(
+            "Tài khoản này không có vai trò Huấn luyện viên (Coach).");
+
+    // Kiểm tra Account đã có profile Coach chưa
+    var isProfileExist = await _context.Coaches
+        .AnyAsync(c => c.AccountId == request.AccountId);
+
+    if (isProfileExist)
+        throw new Exception(
+            "Tài khoản này đã có hồ sơ Huấn luyện viên.");
+
+    // Kiểm tra số điện thoại
+    var isPhoneExist = await _context.Coaches
+        .AnyAsync(c => c.Phone == request.Phone);
+
+    if (isPhoneExist)
+        throw new Exception(
+            "Số điện thoại này đã được sử dụng.");
+
+    // Không kiểm tra Coach.Email nữa.
+    // Email được quản lý duy nhất ở Account.
+    var isEmailExist = await _context.Accounts
+        .AnyAsync(a =>
+            a.Email == request.Email &&
+            a.Id != request.AccountId);
+
+    if (isEmailExist)
+        throw new Exception(
+            "Email này đã được sử dụng.");
+
+    // Nếu request.Email khác Email hiện tại của Account
+    // thì cập nhật Email của Account.
+    account.Email = request.Email;
+
+    // Tạo Coach profile
+    var newCoach = new Repository.Entity.Coach
     {
-        var account = await _context.Accounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+        AccountId = request.AccountId,
+        FullName = request.FullName,
+        Phone = request.Phone,
+        Avatar = request.Avatar ?? string.Empty,
+        Specialization = request.Specialization ?? string.Empty,
+        ExperienceYears = request.ExperienceYears
+    };
 
-        if (account == null)
-            throw new Exception(
-                "Tài khoản (Account) không tồn tại.");
+    _context.Coaches.Add(newCoach);
 
-        if (account.Role != AccountRole.Coach)
-            throw new Exception(
-                "Tài khoản này không có vai trò Huấn luyện viên (Coach).");
+    await _context.SaveChangesAsync();
 
-        var isProfileExist = await _context.Coaches.AnyAsync(c => c.AccountId == request.AccountId);
-        if (isProfileExist) throw new Exception("Tài khoản này đã có hồ sơ Huấn luyện viên.");
+    // MapToResponse sẽ lấy Email từ newCoach.Account.Email
+    newCoach.Account = account;
 
-        var isPhoneExist = await _context.Coaches.AnyAsync(c => c.Phone == request.Phone);
-        if (isPhoneExist) throw new Exception("Số điện thoại này đã được sử dụng.");
-
-        var isEmailExist = await _context.Coaches.AnyAsync(c => c.Email == request.Email);
-        if (isEmailExist) throw new Exception("Email này đã được sử dụng.");
-
-        var newCoach = new Repository.Entity.Coach
-        {
-            AccountId = request.AccountId,
-            FullName = request.FullName,
-            Phone = request.Phone,
-            Email = request.Email,
-            Avatar = request.Avatar ?? string.Empty,
-            Specialization = request.Specialization ?? string.Empty,
-            ExperienceYears = request.ExperienceYears
-        };
-
-        _context.Coaches.Add(newCoach);
-        await _context.SaveChangesAsync();
-
-        return MapToResponse(newCoach);
-    }
+    return MapToResponse(newCoach);
+}
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateCoachRequest request)
     {
-        var coach = await _context.Coaches.FindAsync(id);
-        if (coach == null) return false;
+        // Lấy Coach kèm Account để cập nhật Email trong bảng Account
+        var coach = await _context.Coaches
+            .Include(c => c.Account)
+            .FirstOrDefaultAsync(c => c.Id == id);
 
-        if (coach.Phone != request.Phone && await _context.Coaches.AnyAsync(c => c.Phone == request.Phone))
+        if (coach == null)
+            return false;
+
+        // Kiểm tra số điện thoại trùng với Coach khác
+        if (coach.Phone != request.Phone &&
+            await _context.Coaches.AnyAsync(c =>
+                c.Phone == request.Phone &&
+                c.Id != id))
+        {
             throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+        }
 
-        if (coach.Email != request.Email && await _context.Coaches.AnyAsync(c => c.Email == request.Email))
+        // Kiểm tra Email trùng với Account khác
+        if (coach.Account.Email != request.Email &&
+            await _context.Accounts.AnyAsync(a =>
+                a.Email == request.Email &&
+                a.Id != coach.AccountId))
+        {
             throw new Exception("Email này đã được sử dụng bởi người khác.");
+        }
 
+        // Cập nhật thông tin Coach
         coach.FullName = request.FullName;
         coach.Phone = request.Phone;
-        coach.Email = request.Email;
         coach.Avatar = request.Avatar ?? string.Empty;
         coach.Specialization = request.Specialization ?? string.Empty;
         coach.ExperienceYears = request.ExperienceYears;
 
-        _context.Coaches.Update(coach);
+        // Email nằm ở Account
+        coach.Account.Email = request.Email;
+
         await _context.SaveChangesAsync();
 
         return true;
@@ -164,18 +210,30 @@ public class CoachService : ICoachService
     {
         return await _context.ClassBookings
             .AsNoTracking()
-            .Include(cb => cb.Member)
-            .Include(cb => cb.Class)
             .Where(cb => cb.Class != null && cb.Class.CoachId == coachId)
-            .OrderBy(cb => cb.Class!.ClassName).ThenBy(cb => cb.Member!.FullName)
+            .OrderBy(cb => cb.Class!.ClassName)
+            .ThenBy(cb => cb.Member!.FullName)
             .Select(cb => new Response.CoachMemberResponse
             {
                 MemberId = cb.MemberId,
-                FullName = cb.Member != null ? cb.Member.FullName : string.Empty,
-                Phone = cb.Member != null ? cb.Member.Phone : string.Empty,
-                Email = cb.Member != null ? cb.Member.Email : string.Empty,
+                FullName = cb.Member != null
+                    ? cb.Member.FullName
+                    : string.Empty,
+
+                Phone = cb.Member != null
+                    ? cb.Member.Phone
+                    : string.Empty,
+
+                // Email lấy từ Account
+                Email = cb.Member != null
+                    ? cb.Member.Account.Email
+                    : string.Empty,
+
                 ClassId = cb.ClassId,
-                ClassName = cb.Class != null ? cb.Class.ClassName : string.Empty
+
+                ClassName = cb.Class != null
+                    ? cb.Class.ClassName
+                    : string.Empty
             })
             .ToListAsync();
     }
@@ -188,7 +246,7 @@ public class CoachService : ICoachService
             AccountId = coach.AccountId,
             FullName = coach.FullName,
             Phone = coach.Phone,
-            Email = coach.Email,
+            Email = coach.Account.Email,
             Avatar = coach.Avatar,
             Specialization = coach.Specialization,
             ExperienceYears = coach.ExperienceYears

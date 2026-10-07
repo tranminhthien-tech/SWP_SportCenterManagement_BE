@@ -113,6 +113,11 @@ public class AppDbContext: DbContext
                 .HasMaxLength(100)
                 .IsRequired();
 
+            builder.Property(x => x.Email)
+                .HasColumnName("email")
+                .HasMaxLength(255)
+                .IsRequired();
+
             builder.Property(x => x.Password)
                 .HasColumnName("password")
                 .HasMaxLength(255)
@@ -136,6 +141,10 @@ public class AppDbContext: DbContext
 
             // Username không được trùng
             builder.HasIndex(x => x.Username)
+                .IsUnique();
+
+            // Email không được trùng
+            builder.HasIndex(x => x.Email)
                 .IsUnique();
 
             builder.HasIndex(x => x.Role);
@@ -228,11 +237,7 @@ public class AppDbContext: DbContext
                 .HasColumnName("phone")
                 .HasMaxLength(20)
                 .IsRequired();
-
-            builder.Property(x => x.Email)
-                .HasColumnName("email")
-                .HasMaxLength(150)
-                .IsRequired();
+            
 
             builder.Property(x => x.Avatar)
                 .HasColumnName("avatar")
@@ -248,9 +253,7 @@ public class AppDbContext: DbContext
 
             builder.HasIndex(x => x.Phone)
                 .IsUnique();
-
-            builder.HasIndex(x => x.Email)
-                .IsUnique();
+            
 
             builder.HasOne(x => x.Account)
                 .WithOne(x => x.Member)
@@ -286,11 +289,7 @@ public class AppDbContext: DbContext
                 .HasColumnName("phone")
                 .HasMaxLength(20)
                 .IsRequired();
-
-            builder.Property(x => x.Email)
-                .HasColumnName("email")
-                .HasMaxLength(150)
-                .IsRequired();
+            
 
             builder.Property(x => x.Avatar)
                 .HasColumnName("avatar")
@@ -310,8 +309,6 @@ public class AppDbContext: DbContext
             builder.HasIndex(x => x.Phone)
                 .IsUnique();
 
-            builder.HasIndex(x => x.Email)
-                .IsUnique();
 
             builder.HasOne(x => x.Account)
                 .WithOne(x => x.Coach)
@@ -348,11 +345,6 @@ public class AppDbContext: DbContext
                 .HasMaxLength(20)
                 .IsRequired();
 
-            builder.Property(x => x.Email)
-                .HasColumnName("email")
-                .HasMaxLength(150)
-                .IsRequired();
-
             builder.Property(x => x.WorkingShift)
                 .HasColumnName("working_shift")
                 .HasMaxLength(100);
@@ -362,9 +354,7 @@ public class AppDbContext: DbContext
 
             builder.HasIndex(x => x.Phone)
                 .IsUnique();
-
-            builder.HasIndex(x => x.Email)
-                .IsUnique();
+            
 
             builder.HasOne(x => x.Account)
                 .WithOne(x => x.Receptionist)
@@ -401,10 +391,6 @@ public class AppDbContext: DbContext
                 .HasMaxLength(20)
                 .IsRequired();
 
-            builder.Property(x => x.Email)
-                .HasColumnName("email")
-                .HasMaxLength(150)
-                .IsRequired();
 
             builder.HasIndex(x => x.AccountId)
                 .IsUnique();
@@ -412,8 +398,6 @@ public class AppDbContext: DbContext
             builder.HasIndex(x => x.Phone)
                 .IsUnique();
 
-            builder.HasIndex(x => x.Email)
-                .IsUnique();
 
             builder.HasOne(x => x.Account)
                 .WithOne(x => x.CenterManager)
@@ -1042,8 +1026,6 @@ public class AppDbContext: DbContext
                 Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                 Username = "demo_member",
                 Email = "member@demo.com",
-                Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Member,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1055,7 +1037,6 @@ public class AppDbContext: DbContext
                 Username = "demo_coach",
                 Email = "coach@demo.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Coach,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1067,7 +1048,6 @@ public class AppDbContext: DbContext
                 Username = "demo_receptionist",
                 Email = "receptionist@demo.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Receptionist,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1079,7 +1059,6 @@ public class AppDbContext: DbContext
                 Username = "demo_manager",
                 Email = "manager@demo.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.CenterManager,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1091,7 +1070,6 @@ public class AppDbContext: DbContext
                 Username = "tran.thanh.binh",
                 Email = "yoga@sportcenter.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Coach,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1103,7 +1081,6 @@ public class AppDbContext: DbContext
                 Username = "nguyen.manh.hung",
                 Email = "fitness@sportcenter.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Coach,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1115,7 +1092,6 @@ public class AppDbContext: DbContext
                 Username = "le.hoang.yen",
                 Email = "swim@sportcenter.com",
                 Password = demoPasswordHash,
-                IsVerify = true,
                 Role = AccountRole.Coach,
                 Status = AccountStatus.Active,
                 CreatedAt = new DateTimeOffset(
@@ -1130,7 +1106,6 @@ public class AppDbContext: DbContext
                 AccountId = Guid.Parse("55555555-5555-5555-5555-555555555555"),
                 FullName = "Trần Thanh Bình",
                 Phone = "0901234567",
-                Email = "yoga@sportcenter.com",
                 Avatar = "",
                 Specialization = "Yoga Trị Liệu & Pilates",
                 ExperienceYears = 8,
@@ -1143,7 +1118,6 @@ public class AppDbContext: DbContext
                 AccountId = Guid.Parse("66666666-6666-6666-6666-666666666666"),
                 FullName = "Nguyễn Mạnh Hùng",
                 Phone = "0987654321",
-                Email = "fitness@sportcenter.com",
                 Avatar = "",
                 Specialization = "Huấn luyện Thể hình & Ép mỡ cấp tốc",
                 ExperienceYears = 4,
@@ -1156,7 +1130,6 @@ public class AppDbContext: DbContext
                 AccountId = Guid.Parse("77777777-7777-7777-7777-777777777777"),
                 FullName = "Lê Hoàng Yến",
                 Phone = "0912345678",
-                Email = "swim@sportcenter.com",
                 Avatar = "",
                 Specialization = "Bơi ếch, Bơi sải cơ bản cho trẻ em",
                 ExperienceYears = 1,

@@ -9,7 +9,8 @@ public class Response
         public Guid AccountId { get; set; }
         public string Username { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
-        public bool IsVerify { get; set; }
+        
+        public string FullName { get; set; } = string.Empty;
         public AccountRole Role { get; set; }
         public AccountStatus Status { get; set; }
         public DateTimeOffset CreatedAt { get; set; }

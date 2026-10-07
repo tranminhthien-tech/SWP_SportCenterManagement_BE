@@ -4,6 +4,7 @@ public class Request
 {
     public class MemberRequest
     {
+        public Guid AccountId { get; set; }
         public string FullName { get; set; } = string.Empty;
 
         public DateTime Dob { get; set; }

@@ -57,8 +57,15 @@ public class AccountService : IAccountService
             {
                 AccountId = account.Id,
                 Username = account.Username,
+
+                FullName =
+                    account.Member != null ? account.Member.FullName :
+                    account.Coach != null ? account.Coach.FullName :
+                    account.Receptionist != null ? account.Receptionist.FullName :
+                    account.CenterManager != null ? account.CenterManager.FullName :
+                    string.Empty,
+
                 Email = account.Email,
-                IsVerify = account.IsVerify,
                 Role = account.Role,
                 Status = account.Status,
                 CreatedAt = account.CreatedAt,
@@ -84,8 +91,15 @@ public class AccountService : IAccountService
             {
                 AccountId = account.Id,
                 Username = account.Username,
+
+                FullName =
+                    account.Member != null ? account.Member.FullName :
+                    account.Coach != null ? account.Coach.FullName :
+                    account.Receptionist != null ? account.Receptionist.FullName :
+                    account.CenterManager != null ? account.CenterManager.FullName :
+                    string.Empty,
+
                 Email = account.Email,
-                IsVerify = account.IsVerify,
                 Role = account.Role,
                 Status = account.Status,
                 CreatedAt = account.CreatedAt,
@@ -130,7 +144,6 @@ public class AccountService : IAccountService
         account.Username = username;
         account.Email = email;
         account.Status = request.Status;
-        account.IsVerify = request.IsVerify;
 
         await _dbContext.SaveChangesAsync();
         return true;

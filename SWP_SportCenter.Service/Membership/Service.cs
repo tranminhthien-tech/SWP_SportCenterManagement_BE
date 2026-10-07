@@ -70,82 +70,82 @@ public class Service: IService
         };
     }
 
-    // GET: /api/memberships
-    // Lễ tân/quản lý tra cứu tất cả lượt đăng ký gói tập
-    public async Task<Base.Response.PageResult<Response.MembershipResponse>>
-        GetAllAsync(
-            string? searchTerm,
-            MembershipStatus? status,
-            Guid? memberId,
-            Guid? packageId,
-            int pageSize,
-            int pageIndex)
+   // GET: /api/memberships
+// Lễ tân/quản lý tra cứu tất cả lượt đăng ký gói tập
+public async Task<Base.Response.PageResult<Response.MembershipResponse>>
+    GetAllAsync(
+        string? searchTerm,
+        MembershipStatus? status,
+        Guid? memberId,
+        Guid? packageId,
+        int pageSize,
+        int pageIndex)
+{
+    if (pageSize <= 0 || pageIndex <= 0)
     {
-        if (pageSize <= 0 || pageIndex <= 0)
-        {
-            throw new ArgumentException(
-                "PageSize and PageIndex must be greater than 0");
-        }
-
-        var query = _dbContext.Memberships
-            .AsNoTracking()
-            .Where(x => !x.IsDeleted);
-
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-        {
-            var keyword = searchTerm.Trim();
-            query = query.Where(x =>
-                x.Member.FullName.Contains(keyword) ||
-                x.Member.Phone.Contains(keyword) ||
-                x.Member.Email.Contains(keyword) ||
-                x.Package.PackageName.Contains(keyword));
-        }
-
-        if (status.HasValue)
-        {
-            query = query.Where(x => x.Status == status.Value);
-        }
-
-        if (memberId.HasValue)
-        {
-            query = query.Where(x => x.MemberId == memberId.Value);
-        }
-
-        if (packageId.HasValue)
-        {
-            query = query.Where(x => x.PackageId == packageId.Value);
-        }
-
-        var totalItems = await query.CountAsync();
-
-        var memberships = await query
-            .OrderByDescending(x => x.CreatedAt)
-            .Skip((pageIndex - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new Response.MembershipResponse
-            {
-                MembershipId = x.Id,
-                MemberId = x.MemberId,
-                MemberName = x.Member.FullName,
-                PackageId = x.PackageId,
-                PackageName = x.Package.PackageName,
-                StartDate = x.StartDate,
-                EndDate = x.EndDate,
-                Status = x.Status,
-                CreatedAt = x.CreatedAt,
-                UpdatedAt = x.UpdatedAt
-            })
-            .ToListAsync();
-
-        return new Base.Response.PageResult<Response.MembershipResponse>
-        {
-            Data = memberships,
-            TotalItems = totalItems,
-            PageSize = pageSize,
-            PageIndex = pageIndex
-        };
+        throw new ArgumentException(
+            "PageSize and PageIndex must be greater than 0");
     }
 
+    var query = _dbContext.Memberships
+        .AsNoTracking()
+        .Where(x => !x.IsDeleted);
+
+    if (!string.IsNullOrWhiteSpace(searchTerm))
+    {
+        var keyword = searchTerm.Trim();
+
+        query = query.Where(x =>
+            x.Member.FullName.Contains(keyword) ||
+            x.Member.Phone.Contains(keyword) ||
+            x.Member.Account.Email.Contains(keyword) ||
+            x.Package.PackageName.Contains(keyword));
+    }
+
+    if (status.HasValue)
+    {
+        query = query.Where(x => x.Status == status.Value);
+    }
+
+    if (memberId.HasValue)
+    {
+        query = query.Where(x => x.MemberId == memberId.Value);
+    }
+
+    if (packageId.HasValue)
+    {
+        query = query.Where(x => x.PackageId == packageId.Value);
+    }
+
+    var totalItems = await query.CountAsync();
+
+    var memberships = await query
+        .OrderByDescending(x => x.CreatedAt)
+        .Skip((pageIndex - 1) * pageSize)
+        .Take(pageSize)
+        .Select(x => new Response.MembershipResponse
+        {
+            MembershipId = x.Id,
+            MemberId = x.MemberId,
+            MemberName = x.Member.FullName,
+            PackageId = x.PackageId,
+            PackageName = x.Package.PackageName,
+            StartDate = x.StartDate,
+            EndDate = x.EndDate,
+            Status = x.Status,
+            CreatedAt = x.CreatedAt,
+            UpdatedAt = x.UpdatedAt
+        })
+        .ToListAsync();
+
+    return new Base.Response.PageResult<Response.MembershipResponse>
+    {
+        Data = memberships,
+        TotalItems = totalItems,
+        PageSize = pageSize,
+        PageIndex = pageIndex
+    };
+}
     // GET: /api/members/me/memberships
     // Lấy danh sách membership của member đang đăng nhập
     public async Task<Base.Response.PageResult<Response.MembershipResponse>>

@@ -44,7 +44,6 @@ public class ReceptionistService : IReceptionistService
         Request.CreateReceptionistRequest request)
     {
         var account = await _context.Accounts
-            .AsNoTracking()
             .FirstOrDefaultAsync(account => account.Id == request.AccountId);
 
         if (account == null)
@@ -64,15 +63,19 @@ public class ReceptionistService : IReceptionistService
             throw new InvalidOperationException("Tài khoản này đã có hồ sơ lễ tân.");
         }
 
-        await EnsureContactInformationIsAvailableAsync(request.Phone, request.Email);
+        // Chỉ kiểm tra Phone ở Receptionist.
+        // Email được quản lý ở Account.
+        await EnsureContactInformationIsAvailableAsync(request.Phone);
 
         var receptionist = new Repository.Entity.Receptionist
         {
             AccountId = request.AccountId,
             FullName = request.FullName.Trim(),
             Phone = request.Phone.Trim(),
-            Email = request.Email.Trim(),
-            WorkingShift = request.WorkingShift?.Trim() ?? string.Empty
+            WorkingShift = request.WorkingShift?.Trim() ?? string.Empty,
+
+            // Gắn Account để MapToResponse có thể lấy Email
+            Account = account
         };
 
         _context.Receptionists.Add(receptionist);
@@ -85,7 +88,10 @@ public class ReceptionistService : IReceptionistService
         Guid id,
         Request.UpdateReceptionistRequest request)
     {
-        var receptionist = await _context.Receptionists.FindAsync(id);
+        var receptionist = await _context.Receptionists
+            .Include(r => r.Account)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
         if (receptionist == null)
         {
             return false;
@@ -93,15 +99,17 @@ public class ReceptionistService : IReceptionistService
 
         await EnsureContactInformationIsAvailableAsync(
             request.Phone,
-            request.Email,
             receptionist.Id);
 
         receptionist.FullName = request.FullName.Trim();
         receptionist.Phone = request.Phone.Trim();
-        receptionist.Email = request.Email.Trim();
         receptionist.WorkingShift = request.WorkingShift?.Trim() ?? string.Empty;
 
+        // Email nằm trong Account
+        receptionist.Account.Email = request.Email.Trim();
+
         await _context.SaveChangesAsync();
+
         return true;
     }
 
@@ -127,26 +135,42 @@ public class ReceptionistService : IReceptionistService
         return true;
     }
 
+    // private async Task EnsureContactInformationIsAvailableAsync(
+    //     string phone,
+    //     string email,
+    //     Guid? currentReceptionistId = null)
+    // {
+    //     var normalizedPhone = phone.Trim();
+    //     var normalizedEmail = email.Trim();
+    //
+    //     var isPhoneUsed = await _context.Receptionists.AnyAsync(receptionist =>
+    //         receptionist.Phone == normalizedPhone && receptionist.Id != currentReceptionistId);
+    //     if (isPhoneUsed)
+    //     {
+    //         throw new InvalidOperationException("Số điện thoại này đã được sử dụng.");
+    //     }
+    //
+    //     var isEmailUsed = await _context.Receptionists.AnyAsync(receptionist =>
+    //         receptionist.Email == normalizedEmail && receptionist.Id != currentReceptionistId);
+    //     if (isEmailUsed)
+    //     {
+    //         throw new InvalidOperationException("Email này đã được sử dụng.");
+    //     }
+    // }
     private async Task EnsureContactInformationIsAvailableAsync(
         string phone,
-        string email,
         Guid? currentReceptionistId = null)
     {
         var normalizedPhone = phone.Trim();
-        var normalizedEmail = email.Trim();
 
         var isPhoneUsed = await _context.Receptionists.AnyAsync(receptionist =>
-            receptionist.Phone == normalizedPhone && receptionist.Id != currentReceptionistId);
+            receptionist.Phone == normalizedPhone &&
+            receptionist.Id != currentReceptionistId);
+
         if (isPhoneUsed)
         {
-            throw new InvalidOperationException("Số điện thoại này đã được sử dụng.");
-        }
-
-        var isEmailUsed = await _context.Receptionists.AnyAsync(receptionist =>
-            receptionist.Email == normalizedEmail && receptionist.Id != currentReceptionistId);
-        if (isEmailUsed)
-        {
-            throw new InvalidOperationException("Email này đã được sử dụng.");
+            throw new InvalidOperationException(
+                "Số điện thoại này đã được sử dụng.");
         }
     }
 
@@ -159,7 +183,7 @@ public class ReceptionistService : IReceptionistService
             AccountId = receptionist.AccountId,
             FullName = receptionist.FullName,
             Phone = receptionist.Phone,
-            Email = receptionist.Email,
+            Email = receptionist.Account.Email,
             WorkingShift = receptionist.WorkingShift
         };
     }
