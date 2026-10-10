@@ -13,32 +13,89 @@ public class ReceptionistService : IReceptionistService
         _context = context;
     }
 
+    // public async Task<IEnumerable<Response.ReceptionistResponse>> GetAllAsync()
+    // {
+    //     return await _context.Receptionists
+    //         .AsNoTracking()
+    //         .OrderBy(receptionist => receptionist.FullName)
+    //         .Select(receptionist => MapToResponse(receptionist))
+    //         .ToListAsync();
+    // }
+    
     public async Task<IEnumerable<Response.ReceptionistResponse>> GetAllAsync()
     {
         return await _context.Receptionists
             .AsNoTracking()
-            .OrderBy(receptionist => receptionist.FullName)
-            .Select(receptionist => MapToResponse(receptionist))
+            .Include(r => r.Account)
+            .OrderBy(r => r.FullName)
+            .Select(r => new Response.ReceptionistResponse
+            {
+                Id = r.Id,
+                AccountId = r.AccountId,
+                FullName = r.FullName,
+                Phone = r.Phone,
+                Email = r.Account != null ? r.Account.Email : string.Empty,
+                WorkingShift = r.WorkingShift
+            })
             .ToListAsync();
     }
 
+
+    // public async Task<Response.ReceptionistResponse?> GetByIdAsync(Guid id)
+    // {
+    //     var receptionist = await _context.Receptionists
+    //         .AsNoTracking()
+    //         .FirstOrDefaultAsync(receptionist => receptionist.Id == id);
+    //
+    //     return receptionist == null ? null : MapToResponse(receptionist);
+    // }
+    
     public async Task<Response.ReceptionistResponse?> GetByIdAsync(Guid id)
     {
-        var receptionist = await _context.Receptionists
+        return await _context.Receptionists
             .AsNoTracking()
-            .FirstOrDefaultAsync(receptionist => receptionist.Id == id);
-
-        return receptionist == null ? null : MapToResponse(receptionist);
+            .Include(r => r.Account)
+            .Where(r => r.Id == id)
+            .Select(r => new Response.ReceptionistResponse
+            {
+                Id = r.Id,
+                AccountId = r.AccountId,
+                FullName = r.FullName,
+                Phone = r.Phone,
+                Email = r.Account != null ? r.Account.Email : string.Empty,
+                WorkingShift = r.WorkingShift
+            })
+            .FirstOrDefaultAsync();
     }
 
+
+    // public async Task<Response.ReceptionistResponse?> GetByAccountIdAsync(Guid accountId)
+    // {
+    //     var receptionist = await _context.Receptionists
+    //         .AsNoTracking()
+    //         .FirstOrDefaultAsync(receptionist => receptionist.AccountId == accountId);
+    //
+    //     return receptionist == null ? null : MapToResponse(receptionist);
+    // }
+    
     public async Task<Response.ReceptionistResponse?> GetByAccountIdAsync(Guid accountId)
     {
-        var receptionist = await _context.Receptionists
+        return await _context.Receptionists
             .AsNoTracking()
-            .FirstOrDefaultAsync(receptionist => receptionist.AccountId == accountId);
-
-        return receptionist == null ? null : MapToResponse(receptionist);
+            .Include(r => r.Account)
+            .Where(r => r.AccountId == accountId)
+            .Select(r => new Response.ReceptionistResponse
+            {
+                Id = r.Id,
+                AccountId = r.AccountId,
+                FullName = r.FullName,
+                Phone = r.Phone,
+                Email = r.Account != null ? r.Account.Email : string.Empty,
+                WorkingShift = r.WorkingShift
+            })
+            .FirstOrDefaultAsync();
     }
+
 
     public async Task<Response.ReceptionistResponse> CreateAsync(
         Request.CreateReceptionistRequest request)
@@ -84,6 +141,35 @@ public class ReceptionistService : IReceptionistService
         return MapToResponse(receptionist);
     }
 
+    // public async Task<bool> UpdateAsync(
+    //     Guid id,
+    //     Request.UpdateReceptionistRequest request)
+    // {
+    //     var receptionist = await _context.Receptionists
+    //         .Include(r => r.Account)
+    //         .FirstOrDefaultAsync(r => r.Id == id);
+    //
+    //     if (receptionist == null)
+    //     {
+    //         return false;
+    //     }
+    //
+    //     await EnsureContactInformationIsAvailableAsync(
+    //         request.Phone,
+    //         receptionist);
+    //
+    //     receptionist.FullName = request.FullName.Trim();
+    //     receptionist.Phone = request.Phone.Trim();
+    //     receptionist.WorkingShift = request.WorkingShift?.Trim() ?? string.Empty;
+    //
+    //     // Email nằm trong Account
+    //     receptionist.Account.Email = request.Email.Trim();
+    //
+    //     await _context.SaveChangesAsync();
+    //
+    //     return true;
+    // }
+    
     public async Task<bool> UpdateAsync(
         Guid id,
         Request.UpdateReceptionistRequest request)
@@ -93,9 +179,25 @@ public class ReceptionistService : IReceptionistService
             .FirstOrDefaultAsync(r => r.Id == id);
 
         if (receptionist == null)
-        {
             return false;
-        }
+
+        if (receptionist.Account == null)
+            throw new InvalidOperationException(
+                "Lễ tân chưa được liên kết với tài khoản.");
+
+        var email = request.Email.Trim();
+
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email không được để trống.");
+
+        var emailExists = await _context.Accounts.AnyAsync(a =>
+            a.Id != receptionist.AccountId &&
+            !a.IsDeleted &&
+            a.Email == email);
+
+        if (emailExists)
+            throw new InvalidOperationException(
+                "Email đã được sử dụng.");
 
         await EnsureContactInformationIsAvailableAsync(
             request.Phone,
@@ -103,15 +205,15 @@ public class ReceptionistService : IReceptionistService
 
         receptionist.FullName = request.FullName.Trim();
         receptionist.Phone = request.Phone.Trim();
-        receptionist.WorkingShift = request.WorkingShift?.Trim() ?? string.Empty;
-
-        // Email nằm trong Account
-        receptionist.Account.Email = request.Email.Trim();
+        receptionist.WorkingShift = request.WorkingShift?.Trim()
+                                    ?? string.Empty;
+        receptionist.Account.Email = email;
 
         await _context.SaveChangesAsync();
 
         return true;
     }
+
 
     public async Task<bool> DeleteAsync(Guid id)
     {
@@ -174,6 +276,20 @@ public class ReceptionistService : IReceptionistService
         }
     }
 
+    // private static Response.ReceptionistResponse MapToResponse(
+    //     Repository.Entity.Receptionist receptionist)
+    // {
+    //     return new Response.ReceptionistResponse
+    //     {
+    //         
+    //         AccountId = receptionist.AccountId,
+    //         FullName = receptionist.FullName,
+    //         Phone = receptionist.Phone,
+    //         Email = receptionist.Account.Email,
+    //         WorkingShift = receptionist.WorkingShift
+    //     };
+    // }
+    
     private static Response.ReceptionistResponse MapToResponse(
         Repository.Entity.Receptionist receptionist)
     {
@@ -183,8 +299,9 @@ public class ReceptionistService : IReceptionistService
             AccountId = receptionist.AccountId,
             FullName = receptionist.FullName,
             Phone = receptionist.Phone,
-            Email = receptionist.Account.Email,
+            Email = receptionist.Account?.Email ?? string.Empty,
             WorkingShift = receptionist.WorkingShift
         };
     }
+
 }
