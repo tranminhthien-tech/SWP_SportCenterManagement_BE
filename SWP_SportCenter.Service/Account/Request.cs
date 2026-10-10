@@ -15,6 +15,7 @@ public class Request
         [EmailAddress(ErrorMessage = "Email không hợp lệ")]
         [MaxLength(150)]
         public string Email { get; set; } = string.Empty;
+        public string FullName { get; set; } = string.Empty;
 
         public AccountStatus Status { get; set; }
 

@@ -29,7 +29,9 @@ public class AttendanceService : IAttendanceService
             {
                 Id = a.Id,
                 SessionId = a.SessionId,
-                SessionDate = a.Session != null ? a.Session.Date : DateTime.MinValue,
+                SessionDate = a.Session != null
+                    ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
+                    : DateTime.MinValue,
                 SessionStartTime = a.Session != null ? a.Session.StartTime : TimeSpan.Zero,
                 MemberId = a.MemberId,
                 MemberName = a.Member != null ? a.Member.FullName : string.Empty,
@@ -47,12 +49,15 @@ public class AttendanceService : IAttendanceService
             .Include(a => a.Session)
             .Include(a => a.Member)
             .Where(a => a.MemberId == memberId)
-            .OrderByDescending(a => a.Session != null ? a.Session.Date : DateTime.MinValue)
+            .OrderByDescending(a =>
+                a.Session != null ? a.Session.Date : DateOnly.MinValue)
             .Select(a => new Response.AttendanceResponse
             {
                 Id = a.Id,
                 SessionId = a.SessionId,
-                SessionDate = a.Session != null ? a.Session.Date : DateTime.MinValue,
+                SessionDate = a.Session != null
+                    ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
+                    : DateTime.MinValue,
                 SessionStartTime = a.Session != null ? a.Session.StartTime : TimeSpan.Zero,
                 MemberId = a.MemberId,
                 MemberName = a.Member != null ? a.Member.FullName : string.Empty,
@@ -109,7 +114,7 @@ public class AttendanceService : IAttendanceService
         {
             Id = savedAttendance.Id,
             SessionId = savedAttendance.SessionId,
-            SessionDate = savedAttendance.Session.Date,
+            SessionDate = savedAttendance.Session.Date.ToDateTime(TimeOnly.MinValue),
             SessionStartTime = savedAttendance.Session.StartTime,
             MemberId = savedAttendance.MemberId,
             MemberName = savedAttendance.Member.FullName,

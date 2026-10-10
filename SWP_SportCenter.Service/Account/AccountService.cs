@@ -108,11 +108,56 @@ public class AccountService : IAccountService
             .FirstOrDefaultAsync();
     }
 
+    // public async Task<bool> UpdateAsync(
+    //     Guid id,
+    //     Request.UpdateAccountRequest request)
+    // {
+    //     var account = await _dbContext.Accounts
+    //         .FirstOrDefaultAsync(account =>
+    //             account.Id == id &&
+    //             !account.IsDeleted);
+    //
+    //     if (account == null)
+    //     {
+    //         return false;
+    //     }
+    //
+    //     var username = request.Username.Trim();
+    //     var email = request.Email.Trim();
+    //
+    //     var usernameExists = await _dbContext.Accounts.AnyAsync(other =>
+    //         other.Id != id &&
+    //         other.Username == username);
+    //     if (usernameExists)
+    //     {
+    //         throw new InvalidOperationException("Username đã được sử dụng.");
+    //     }
+    //
+    //     var emailExists = await _dbContext.Accounts.AnyAsync(other =>
+    //         other.Id != id &&
+    //         other.Email == email);
+    //     if (emailExists)
+    //     {
+    //         throw new InvalidOperationException("Email đã được sử dụng.");
+    //     }
+    //
+    //     account.Username = username;
+    //     account.Email = email;
+    //     account.Status = request.Status;
+    //
+    //     await _dbContext.SaveChangesAsync();
+    //     return true;
+    // }
+    
     public async Task<bool> UpdateAsync(
         Guid id,
         Request.UpdateAccountRequest request)
     {
         var account = await _dbContext.Accounts
+            .Include(account => account.Member)
+            .Include(account => account.Coach)
+            .Include(account => account.Receptionist)
+            .Include(account => account.CenterManager)
             .FirstOrDefaultAsync(account =>
                 account.Id == id &&
                 !account.IsDeleted);
@@ -122,32 +167,75 @@ public class AccountService : IAccountService
             return false;
         }
 
+        // Validate input
         var username = request.Username.Trim();
         var email = request.Email.Trim();
+        var fullName = request.FullName?.Trim();
+
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            throw new ArgumentException("Username không được để trống.");
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new ArgumentException("Email không được để trống.");
+        }
 
         var usernameExists = await _dbContext.Accounts.AnyAsync(other =>
             other.Id != id &&
+            !other.IsDeleted &&
             other.Username == username);
+
         if (usernameExists)
         {
-            throw new InvalidOperationException("Username đã được sử dụng.");
+            throw new InvalidOperationException(
+                "Username đã được sử dụng.");
         }
 
         var emailExists = await _dbContext.Accounts.AnyAsync(other =>
             other.Id != id &&
+            !other.IsDeleted &&
             other.Email == email);
+
         if (emailExists)
         {
-            throw new InvalidOperationException("Email đã được sử dụng.");
+            throw new InvalidOperationException(
+                "Email đã được sử dụng.");
         }
 
+        // Update account information
         account.Username = username;
         account.Email = email;
         account.Status = request.Status;
 
+        // Update profile FullName according to the linked profile.
+        // The Account navigation properties must be configured correctly.
+        if (fullName != null)
+        {
+            if (account.Member != null)
+            {
+                account.Member.FullName = fullName;
+            }
+            else if (account.Coach != null)
+            {
+                account.Coach.FullName = fullName;
+            }
+            else if (account.Receptionist != null)
+            {
+                account.Receptionist.FullName = fullName;
+            }
+            else if (account.CenterManager != null)
+            {
+                account.CenterManager.FullName = fullName;
+            }
+        }
+
         await _dbContext.SaveChangesAsync();
+
         return true;
     }
+
 
     public async Task<bool> SoftDeleteAsync(Guid id)
     {
