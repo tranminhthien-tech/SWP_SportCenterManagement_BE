@@ -34,6 +34,16 @@ public class AccountController : ControllerBase
 
         return Ok(result);
     }
+    
+    [HttpPost]
+    public async Task<IActionResult> Create(
+        [FromBody] Request.CreateAccountRequest request)
+    {
+        var account = await _accountService.CreateAsync(request);
+
+        return Ok(account);
+    }
+
 
     // GET: api/accounts/{id}
     [HttpGet("{id:guid}")]

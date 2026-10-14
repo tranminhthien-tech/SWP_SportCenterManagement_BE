@@ -14,4 +14,8 @@ public interface IAccountService
     Task<Response.AccountResponse?> GetByIdAsync(Guid id);
     Task<bool> UpdateAsync(Guid id, Request.UpdateAccountRequest request);
     Task<bool> SoftDeleteAsync(Guid id);
+    
+    Task<Response.AccountResponse> CreateAsync(
+        Request.CreateAccountRequest request);
+
 }
