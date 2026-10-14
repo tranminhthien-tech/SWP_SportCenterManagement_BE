@@ -93,16 +93,16 @@ public class Service: IService
         Request.MemberRequest request)
     {
         var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted);
 
         if (account == null)
         {
-            throw new InvalidOperationException("Tài khoản không tồn tại.");
+            throw new Exception("Tài khoản không tồn tại.");
         }
 
         if (account.Role != AccountRole.Member)
         {
-            throw new InvalidOperationException(
+            throw new Exception(
                 "Tài khoản này không có vai trò Member.");
         }
 
@@ -111,7 +111,7 @@ public class Service: IService
 
         if (isMemberExist)
         {
-            throw new InvalidOperationException(
+            throw new Exception(
                 "Tài khoản này đã có hồ sơ Member.");
         }
 
@@ -120,7 +120,7 @@ public class Service: IService
 
         if (isPhoneExist)
         {
-            throw new InvalidOperationException(
+            throw new Exception(
                 "Số điện thoại này đã được sử dụng.");
         }
 

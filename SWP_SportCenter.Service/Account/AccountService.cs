@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository;
+using SWP_SportCenter.Repository.Entity;
 using SWP_SportCenter.Repository.Enum;
+using SWP_SportCenter.Service.Until;
 
 namespace SWP_SportCenter.Service.Accounts;
 
@@ -211,25 +213,59 @@ public class AccountService : IAccountService
 
         // Update profile FullName according to the linked profile.
         // The Account navigation properties must be configured correctly.
+        
+        
         if (fullName != null)
         {
-            if (account.Member != null)
+            switch (account.Role)
             {
-                account.Member.FullName = fullName;
-            }
-            else if (account.Coach != null)
-            {
-                account.Coach.FullName = fullName;
-            }
-            else if (account.Receptionist != null)
-            {
-                account.Receptionist.FullName = fullName;
-            }
-            else if (account.CenterManager != null)
-            {
-                account.CenterManager.FullName = fullName;
+                case AccountRole.Member:
+                {
+                    if (account.Member != null)
+                    {
+                        account.Member.FullName = fullName;
+                    }
+                    else
+                    {
+                        var member = new Repository.Entity.Member()
+                        {
+                            AccountId = account.Id,
+                            FullName = fullName
+                        };
+
+                        _dbContext.Members.Add(member);
+                        account.Member = member;
+                    }
+
+                    break;
+                }
+
+                case AccountRole.Coach:
+                {
+                    if (account.Coach != null)
+                        account.Coach.FullName = fullName;
+
+                    break;
+                }
+
+                case AccountRole.Receptionist:
+                {
+                    if (account.Receptionist != null)
+                        account.Receptionist.FullName = fullName;
+
+                    break;
+                }
+
+                case AccountRole.CenterManager:
+                {
+                    if (account.CenterManager != null)
+                        account.CenterManager.FullName = fullName;
+
+                    break;
+                }
             }
         }
+
 
         await _dbContext.SaveChangesAsync();
 
@@ -255,4 +291,140 @@ public class AccountService : IAccountService
         await _dbContext.SaveChangesAsync();
         return true;
     }
+    
+    
+public async Task<Response.AccountResponse> CreateAsync(
+    Request.CreateAccountRequest request)
+{
+    var username = request.Username.Trim();
+    var email = request.Email.Trim();
+    var fullName = request.FullName.Trim();
+
+    if (string.IsNullOrWhiteSpace(username))
+        throw new ArgumentException("Username không được để trống.");
+
+    if (string.IsNullOrWhiteSpace(email))
+        throw new ArgumentException("Email không được để trống.");
+
+    if (string.IsNullOrWhiteSpace(fullName))
+        throw new ArgumentException("FullName không được để trống.");
+
+    if (string.IsNullOrWhiteSpace(request.Password))
+        throw new ArgumentException("Mật khẩu không được để trống.");
+
+    if (!Enum.IsDefined(typeof(AccountRole), request.Role))
+        throw new ArgumentException("Role không hợp lệ.");
+
+    if (!Enum.IsDefined(typeof(AccountStatus), request.Status))
+        throw new ArgumentException("Status không hợp lệ.");
+
+    var usernameExists = await _dbContext.Accounts.AnyAsync(a =>
+        !a.IsDeleted && a.Username == username);
+
+    if (usernameExists)
+        throw new InvalidOperationException(
+            "Username đã được sử dụng.");
+
+    var emailExists = await _dbContext.Accounts.AnyAsync(a =>
+        !a.IsDeleted && a.Email == email);
+
+    if (emailExists)
+        throw new InvalidOperationException(
+            "Email đã được sử dụng.");
+
+    var account = new Account() 
+    {
+        Username = username,
+        Email = email,
+        Password = Argon2Hasher.HashPassword(request.Password),
+        Role = request.Role,
+        Status = request.Status
+    };
+
+    _dbContext.Accounts.Add(account);
+
+    switch (request.Role)
+    {
+        case AccountRole.Member:
+        {
+            var member = new Repository.Entity.Member()
+            {
+                Account = account,
+                FullName = fullName,
+                Phone = string.Empty,
+                Avatar = string.Empty,
+                Gender = string.Empty,
+                TrainingGoal = string.Empty,
+
+                // Giá trị tạm thời vì form hiện chưa có ngày sinh.
+                // Nên bổ sung Dob vào form tạo Member.
+                Dob = DateTime.UtcNow.Date
+            };
+
+            _dbContext.Members.Add(member);
+            break;
+        }
+
+        case AccountRole.Coach:
+        {
+            var coach = new Repository.Entity.Coach()
+            {
+                Account = account,
+                FullName = fullName,
+                Phone = string.Empty,
+                Avatar = string.Empty,
+                Specialization = string.Empty,
+                ExperienceYears = 0
+            };
+
+            _dbContext.Coaches.Add(coach);
+            break;
+        }
+
+        case AccountRole.Receptionist:
+        {
+            var receptionist = new Repository.Entity.Receptionist()
+            {
+                Account = account,
+                FullName = fullName,
+                Phone = string.Empty,
+                WorkingShift = string.Empty
+            };
+
+            _dbContext.Receptionists.Add(receptionist);
+            break;
+        }
+
+        case AccountRole.CenterManager:
+        {
+            var manager = new Repository.Entity.CenterManager()
+            {
+                Account = account,
+                FullName = fullName,
+                Phone = string.Empty
+            };
+
+            _dbContext.CenterManagers.Add(manager);
+            break;
+        }
+
+        default:
+            throw new ArgumentException("Role không được hỗ trợ.");
+    }
+
+    await _dbContext.SaveChangesAsync();
+
+    return new Response.AccountResponse
+    {
+        AccountId = account.Id,
+        Username = account.Username,
+        Email = account.Email,
+        FullName = fullName,
+        Role = account.Role,
+        Status = account.Status,
+        CreatedAt = account.CreatedAt,
+        UpdatedAt = account.UpdatedAt
+    };
+}
+
 }

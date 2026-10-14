@@ -25,143 +25,92 @@ public class Service: IService
         configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
         _httpContextAccessor = httpContextAccessor;
     }
-    public async Task<Response.IdentityResponse> Login(Request.LoginRequest request)
-    {
-        // Tìm tài khoản bằng Email
-        var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a =>
-                a.Email == request.Email &&
-                !a.IsDeleted);
-
-        if (account == null)
-        {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password");
-        }
-
-        // Kiểm tra mật khẩu bằng Argon2
-        bool isPasswordValid = Argon2Hasher.VerifyHash(
-            request.Password,
-            account.Password
-        );
-
-        if (!isPasswordValid)
-        {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password");
-        }
-
-        // Kiểm tra trạng thái tài khoản
-        if (account.Status != AccountStatus.Active)
-        {
-            throw new UnauthorizedAccessException(
-                "Account is not active");
-        }
-
-
-        // Tạo claims cho JWT
-        var claims = new List<Claim>
-        {
-            new Claim(
-                ClaimTypes.NameIdentifier,
-                account.Id.ToString()),
-
-            new Claim(
-                ClaimTypes.Name,
-                account.Username),
-
-            new Claim(
-                ClaimTypes.Email,
-                account.Email),
-
-            new Claim(
-                ClaimTypes.Role,
-                account.Role.ToString())
-        };
-
-        // Tạo access token
-        var token = _jwtService.GenerateAccessToken(claims);
-
-        // Trả kết quả đăng nhập
-        var result = new Response.IdentityResponse
-        {
-            Access_token = token,
-            UserId = account.Id,
-
-        };
-
-        return result;
-    }
-
-      // POST /api/auth/register
-    public async Task<Response.RegisterResponse> RegisterAsync(
-        Request.RegisterRequest request)
-    {
-        // Kiểm tra username đã tồn tại chưa
-        bool usernameExists = await _dbContext.Accounts
-            .AnyAsync(a => a.Username == request.Username);
-
-        if (usernameExists)
-        {
-            throw new InvalidOperationException(
-                "Username already exists");
-        }
-
-        // Kiểm tra email đã tồn tại chưa
-        bool emailExists = await _dbContext.Accounts
-            .AnyAsync(a => a.Email == request.Email);
-
-        if (emailExists)
-        {
-            throw new InvalidOperationException(
-                "Email already exists");
-        }
-
-        // Hash mật khẩu bằng Argon2
-        string hashedPassword =
-            Argon2Hasher.HashPassword(request.Password);
-
-        // Tạo Account
-        var account = new Account()
-        {
-            Username = request.Username,
-            Email = request.Email,
-            Password = hashedPassword,
-            Role = AccountRole.Member,
-            Status = AccountStatus.Active
-        };
-
-        _dbContext.Accounts.Add(account);
-
-        // TODO: Tạo Member profile sau khi xác nhận
-        // các thuộc tính bắt buộc trong entity Member.
-
-        await _dbContext.SaveChangesAsync();
-
-        return new Response.RegisterResponse
-        {
-            UserId = account.Id,
-            Email = account.Email,
-            Message = "Registration successful"
-        };
-    }
-
-    // POST /api/auth/login
-    public async Task<Response.IdentityResponse> LoginAsync(
+    // public async Task<Response.IdentityResponse> Login(Request.LoginRequest request)
+    // {
+    //     // Tìm tài khoản bằng Email
+    //     var account = await _dbContext.Accounts
+    //         .FirstOrDefaultAsync(a =>
+    //             a.Email == request.Email &&
+    //             !a.IsDeleted);
+    //
+    //     if (account == null)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Invalid email or password");
+    //     }
+    //
+    //     // Kiểm tra mật khẩu bằng Argon2
+    //     bool isPasswordValid = Argon2Hasher.VerifyHash(
+    //         request.Password,
+    //         account.Password
+    //     );
+    //
+    //     if (!isPasswordValid)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Invalid email or password");
+    //     }
+    //
+    //     // Kiểm tra trạng thái tài khoản
+    //     if (account.Status != AccountStatus.Active)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Account is not active");
+    //     }
+    //
+    //
+    //     // Tạo claims cho JWT
+    //     var claims = new List<Claim>
+    //     {
+    //         new Claim(
+    //             ClaimTypes.NameIdentifier,
+    //             account.Id.ToString()),
+    //
+    //         new Claim(
+    //             ClaimTypes.Name,
+    //             account.Username),
+    //
+    //         new Claim(
+    //             ClaimTypes.Email,
+    //             account.Email),
+    //
+    //         new Claim(
+    //             ClaimTypes.Role,
+    //             account.Role.ToString())
+    //     };
+    //
+    //     // Tạo access token
+    //     var token = _jwtService.GenerateAccessToken(claims);
+    //
+    //     // Trả kết quả đăng nhập
+    //     var result = new Response.IdentityResponse
+    //     {
+    //         Access_token = token,
+    //         UserId = account.Id,
+    //
+    //     };
+    //
+    //     return result;
+    // }
+    public async Task<Response.IdentityResponse> Login(
         Request.LoginRequest request)
     {
         var account = await _dbContext.Accounts
+            .Include(a => a.Member)
+            .Include(a => a.Coach)
+            .Include(a => a.Receptionist)
+            .Include(a => a.CenterManager)
             .FirstOrDefaultAsync(a =>
-                a.Email == request.Email &&
+                (a.Username == request.Username ||
+                 a.Email == request.Username) &&
                 !a.IsDeleted);
 
         if (account == null)
         {
             throw new UnauthorizedAccessException(
-                "Invalid email or password");
+                "Invalid username or password");
         }
 
-        // Verify mật khẩu bằng Argon2
         bool isPasswordValid = Argon2Hasher.VerifyHash(
             request.Password,
             account.Password);
@@ -169,7 +118,7 @@ public class Service: IService
         if (!isPasswordValid)
         {
             throw new UnauthorizedAccessException(
-                "Invalid email or password");
+                "Invalid username or password");
         }
 
         if (account.Status != AccountStatus.Active)
@@ -178,15 +127,30 @@ public class Service: IService
                 "Account is not active");
         }
 
+        var fullName = account.Role switch
+        {
+            AccountRole.Member => account.Member?.FullName,
+            AccountRole.Coach => account.Coach?.FullName,
+            AccountRole.Receptionist => account.Receptionist?.FullName,
+            AccountRole.CenterManager => account.CenterManager?.FullName,
+            _ => null
+        };
+
         var claims = new List<Claim>
         {
             new Claim(
                 ClaimTypes.NameIdentifier,
                 account.Id.ToString()),
 
+            // Username dùng cho định danh hiện tại
             new Claim(
                 ClaimTypes.Name,
                 account.Username),
+
+            // FullName chỉ dùng để hiển thị
+            new Claim(
+                "FullName",
+                fullName ?? string.Empty),
 
             new Claim(
                 ClaimTypes.Email,
@@ -205,6 +169,122 @@ public class Service: IService
             UserId = account.Id,
         };
     }
+
+
+      // POST /api/auth/register
+    public async Task<Response.RegisterResponse> RegisterAsync(
+        Request.RegisterRequest request)
+    {
+        // Kiểm tra username đã tồn tại chưa
+        bool usernameExists = await _dbContext.Accounts
+            .AnyAsync(a => a.Username == request.Username);
+    
+        if (usernameExists)
+        {
+            throw new InvalidOperationException(
+                "Username already exists");
+        }
+    
+        // Kiểm tra email đã tồn tại chưa
+        bool emailExists = await _dbContext.Accounts
+            .AnyAsync(a => a.Email == request.Email);
+    
+        if (emailExists)
+        {
+            throw new InvalidOperationException(
+                "Email already exists");
+        }
+    
+        // Hash mật khẩu bằng Argon2
+        string hashedPassword =
+            Argon2Hasher.HashPassword(request.Password);
+    
+        // Tạo Account
+        var account = new Account()
+        {
+            Username = request.Username,
+            Email = request.Email,
+            Password = hashedPassword,
+            Role = AccountRole.Member,
+            Status = AccountStatus.Active
+        };
+    
+        _dbContext.Accounts.Add(account);
+    
+        // TODO: Tạo Member profile sau khi xác nhận
+        // các thuộc tính bắt buộc trong entity Member.
+    
+        await _dbContext.SaveChangesAsync();
+    
+        return new Response.RegisterResponse
+        {
+            UserId = account.Id,
+            Email = account.Email,
+            Message = "Registration successful"
+        };
+    }
+    
+    // POST /api/auth/login
+    public async Task<Response.IdentityResponse> LoginAsync(
+        Request.LoginRequest request)
+    {
+        var account = await _dbContext.Accounts
+            .FirstOrDefaultAsync(a =>
+                a.Email == request.Email &&
+                !a.IsDeleted);
+    
+        if (account == null)
+        {
+            throw new UnauthorizedAccessException(
+                "Invalid email or password");
+        }
+    
+        // Verify mật khẩu bằng Argon2
+        bool isPasswordValid = Argon2Hasher.VerifyHash(
+            request.Password,
+            account.Password);
+    
+        if (!isPasswordValid)
+        {
+            throw new UnauthorizedAccessException(
+                "Invalid email or password");
+        }
+    
+        if (account.Status != AccountStatus.Active)
+        {
+            throw new UnauthorizedAccessException(
+                "Account is not active");
+        }
+    
+        var claims = new List<Claim>
+        {
+            new Claim(
+                ClaimTypes.NameIdentifier,
+                account.Id.ToString()),
+    
+            new Claim(
+                ClaimTypes.Name,
+                account.Username),
+    
+            new Claim(
+                ClaimTypes.Email,
+                account.Email),
+    
+            new Claim(
+                ClaimTypes.Role,
+                account.Role.ToString())
+        };
+    
+        string token = _jwtService.GenerateAccessToken(claims);
+    
+        return new Response.IdentityResponse
+        {
+            Access_token = token,
+            UserId = account.Id,
+        };
+    }
+    
+    
 
     // GET /api/auth/me
     public async Task<Response.MeResponse> GetMeAsync()
