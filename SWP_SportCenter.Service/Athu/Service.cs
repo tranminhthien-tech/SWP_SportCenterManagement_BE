@@ -101,8 +101,8 @@ public class Service: IService
             .Include(a => a.Receptionist)
             .Include(a => a.CenterManager)
             .FirstOrDefaultAsync(a =>
-                (a.Username == request.Username ||
-                 a.Email == request.Username) &&
+                (a.Username == request.Email ||
+                 a.Email == request.Email) &&
                 !a.IsDeleted);
 
         if (account == null)
@@ -225,64 +225,64 @@ public class Service: IService
     }
     
     // POST /api/auth/login
-    public async Task<Response.IdentityResponse> LoginAsync(
-        Request.LoginRequest request)
-    {
-        var account = await _dbContext.Accounts
-            .FirstOrDefaultAsync(a =>
-                a.Email == request.Email &&
-                !a.IsDeleted);
-    
-        if (account == null)
-        {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password");
-        }
-    
-        // Verify mật khẩu bằng Argon2
-        bool isPasswordValid = Argon2Hasher.VerifyHash(
-            request.Password,
-            account.Password);
-    
-        if (!isPasswordValid)
-        {
-            throw new UnauthorizedAccessException(
-                "Invalid email or password");
-        }
-    
-        if (account.Status != AccountStatus.Active)
-        {
-            throw new UnauthorizedAccessException(
-                "Account is not active");
-        }
-    
-        var claims = new List<Claim>
-        {
-            new Claim(
-                ClaimTypes.NameIdentifier,
-                account.Id.ToString()),
-    
-            new Claim(
-                ClaimTypes.Name,
-                account.Username),
-    
-            new Claim(
-                ClaimTypes.Email,
-                account.Email),
-    
-            new Claim(
-                ClaimTypes.Role,
-                account.Role.ToString())
-        };
-    
-        string token = _jwtService.GenerateAccessToken(claims);
-    
-        return new Response.IdentityResponse
-        {
-            Access_token = token,
-            UserId = account.Id,
-        };
-    }
+    // public async Task<Response.IdentityResponse> LoginAsync(
+    //     Request.LoginRequest request)
+    // {
+    //     var account = await _dbContext.Accounts
+    //         .FirstOrDefaultAsync(a =>
+    //             a.Email == request.Email &&
+    //             !a.IsDeleted);
+    //
+    //     if (account == null)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Invalid email or password");
+    //     }
+    //
+    //     // Verify mật khẩu bằng Argon2
+    //     bool isPasswordValid = Argon2Hasher.VerifyHash(
+    //         request.Password,
+    //         account.Password);
+    //
+    //     if (!isPasswordValid)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Invalid email or password");
+    //     }
+    //
+    //     if (account.Status != AccountStatus.Active)
+    //     {
+    //         throw new UnauthorizedAccessException(
+    //             "Account is not active");
+    //     }
+    //
+    //     var claims = new List<Claim>
+    //     {
+    //         new Claim(
+    //             ClaimTypes.NameIdentifier,
+    //             account.Id.ToString()),
+    //
+    //         new Claim(
+    //             ClaimTypes.Name,
+    //             account.Username),
+    //
+    //         new Claim(
+    //             ClaimTypes.Email,
+    //             account.Email),
+    //
+    //         new Claim(
+    //             ClaimTypes.Role,
+    //             account.Role.ToString())
+    //     };
+    //
+    //     string token = _jwtService.GenerateAccessToken(claims);
+    //
+    //     return new Response.IdentityResponse
+    //     {
+    //         Access_token = token,
+    //         UserId = account.Id,
+    //     };
+    // }
     
     
 
