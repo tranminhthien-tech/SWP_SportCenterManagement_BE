@@ -38,7 +38,8 @@ builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 
-
+builder.Services.AddSwaggerServices();
+builder.Services.AddJwtServices(builder.Configuration);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
