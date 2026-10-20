@@ -122,7 +122,7 @@ public class NotificationService : INotificationService
         _db.Notifications.AddRange(notifications);
         await _db.SaveChangesAsync();
 
-        // Trả về thông báo đầu tiên làm đại diện
+    // Trả về thông báo đầu tiên làm đại diện
         var first = notifications.First();
         return new Response.NotificationResponse
         {
