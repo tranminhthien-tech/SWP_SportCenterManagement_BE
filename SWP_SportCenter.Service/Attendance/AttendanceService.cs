@@ -101,9 +101,7 @@ public class AttendanceService : IAttendanceService
         _context.Attendances.Add(newAttendance);
         await _context.SaveChangesAsync();
         
-        await SyncBookingStatusAsync(
-            request.MemberId,
-            session.ClassId);
+        await SyncBookingStatusAsync(request.MemberId, session.ClassId);
 
         var savedAttendance = await _context.Attendances
             .Include(a => a.Member)
