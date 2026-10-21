@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Room;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class RoomController : ControllerBase
 
     // GET: api/rooms
     // Lấy danh sách phòng tập
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -26,6 +29,7 @@ public class RoomController : ControllerBase
 
     // GET: api/rooms/{id}
     // Lấy thông tin chi tiết phòng tập
+    [Authorize]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -39,6 +43,7 @@ public class RoomController : ControllerBase
 
     // POST: api/rooms
     // Tạo phòng tập mới
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateRoomRequest request)
@@ -50,6 +55,7 @@ public class RoomController : ControllerBase
 
     // PUT: api/rooms/{id}
     // Cập nhật thông tin phòng tập
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -65,6 +71,7 @@ public class RoomController : ControllerBase
 
     // DELETE: api/rooms/{id}
     // Xóa phòng tập
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

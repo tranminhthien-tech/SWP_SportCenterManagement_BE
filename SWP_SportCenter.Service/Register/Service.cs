@@ -8,7 +8,7 @@ using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Jwt;
 using SWP_SportCenter.Service.Until;
 
-namespace SWP_SportCenter.Service.Athu;
+namespace SWP_SportCenter.Service.Register;
 
 public class Service: IService 
 {

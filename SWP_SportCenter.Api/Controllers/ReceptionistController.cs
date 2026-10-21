@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Receptionist;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // GET: api/receptionists
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -23,6 +26,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // GET: api/receptionists/{id}
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -33,6 +37,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // GET: api/receptionists/account/{accountId}
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet("account/{accountId:guid}")]
     public async Task<IActionResult> GetByAccountId(Guid accountId)
     {
@@ -43,6 +48,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // GET: api/receptionists/me
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)]
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -59,6 +65,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // POST: api/receptionists
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateReceptionistRequest request)
@@ -68,6 +75,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // PUT: api/receptionists/{id}
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -80,6 +88,7 @@ public class ReceptionistController : ControllerBase
     }
 
     // DELETE: api/receptionists/{id}
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

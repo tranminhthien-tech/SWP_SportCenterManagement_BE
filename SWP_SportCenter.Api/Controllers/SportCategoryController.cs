@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.SportCategory;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class SportCategoryController : ControllerBase
 
     // GET: api/categories
     // Lấy danh sách bộ môn
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -26,6 +29,7 @@ public class SportCategoryController : ControllerBase
 
     // GET: api/categories/{id}
     // Lấy thông tin chi tiết bộ môn
+    [Authorize]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -39,6 +43,7 @@ public class SportCategoryController : ControllerBase
 
     // POST: api/categories
     // Tạo bộ môn mới
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateSportCategoryRequest request)
@@ -50,6 +55,7 @@ public class SportCategoryController : ControllerBase
 
     // PUT: api/categories/{id}
     // Cập nhật thông tin bộ môn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -65,6 +71,7 @@ public class SportCategoryController : ControllerBase
 
     // DELETE: api/categories/{id}
     // Xóa bộ môn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

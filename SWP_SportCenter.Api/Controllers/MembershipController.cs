@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Membership;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class MembershipController : ControllerBase
 
     // GET /api/memberships
     // Lễ tân/quản lý lấy danh sách membership tổng quát, có phân trang và bộ lọc.
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("memberships")]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? searchTerm,
@@ -38,6 +41,7 @@ public class MembershipController : ControllerBase
 
     // GET /api/members/me/memberships
     // Lấy danh sách Membership của Member đang đăng nhập
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpGet("members/me/memberships")]
     public async Task<IActionResult> GetMyMemberships(
         [FromQuery] int pageSize = 10,
@@ -52,6 +56,7 @@ public class MembershipController : ControllerBase
 
     // GET /api/members/{memberId}/memberships
     // Lấy danh sách Membership của một Member
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("members/{memberId:guid}/memberships")]
     public async Task<IActionResult> GetByMemberId(
         [FromRoute] Guid memberId,
@@ -68,6 +73,7 @@ public class MembershipController : ControllerBase
 
     // GET /api/memberships/{id}
     // Lấy chi tiết Membership
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("memberships/{id:guid}")]
     public async Task<IActionResult> GetById(
         [FromRoute] Guid id)
@@ -84,6 +90,7 @@ public class MembershipController : ControllerBase
 
     // GET /api/memberships/{id}/status
     // Kiểm tra trạng thái Membership
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("memberships/{id:guid}/status")]
     public async Task<IActionResult> GetStatus(
         [FromRoute] Guid id)
@@ -100,6 +107,7 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships
     // Đăng ký / mua Membership
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost("memberships")]
     public async Task<IActionResult> Create(
         [FromBody] Request.MembershipRequest request)
@@ -111,6 +119,7 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships/{id}/renew
     // Gia hạn Membership
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost("memberships/{id:guid}/renew")]
     public async Task<IActionResult> Renew(
         [FromRoute] Guid id)
@@ -127,6 +136,7 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships/{id}/cancel
     // Hủy Membership
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost("memberships/{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(
         [FromRoute] Guid id)

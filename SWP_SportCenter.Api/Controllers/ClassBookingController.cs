@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.ClassBooking;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class ClassBookingController : ControllerBase
 
     // GET: api/class-bookings/member/{memberId}
     // Lấy danh sách lớp học mà Member đã đăng ký
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpGet("member/{memberId:guid}")]
     public async Task<IActionResult> GetMemberBookings(Guid memberId)
     {
@@ -26,6 +29,7 @@ public class ClassBookingController : ControllerBase
 
     // POST: api/class-bookings
     // Đăng ký tham gia lớp học
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpPost]
     public async Task<IActionResult> BookClass(
         [FromBody] Request.CreateBookingRequest request)
@@ -37,6 +41,7 @@ public class ClassBookingController : ControllerBase
 
     // DELETE: api/class-bookings/{bookingId}/member/{memberId}
     // Hủy đăng ký lớp học
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpDelete("{bookingId:guid}/member/{memberId:guid}")]
     public async Task<IActionResult> CancelBooking(
         Guid bookingId,

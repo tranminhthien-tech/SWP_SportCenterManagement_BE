@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Notification;
 
 namespace SWP_SportCenter.Controllers;
@@ -52,6 +53,7 @@ public class NotificationController : ControllerBase
 
     // POST: api/notifications
     // Gửi thông báo (Manager)
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Send(
         [FromBody] Request.SendNotificationRequest request)

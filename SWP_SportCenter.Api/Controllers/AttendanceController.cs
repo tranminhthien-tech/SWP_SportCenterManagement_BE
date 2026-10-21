@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Service.Attendance;
 
@@ -16,6 +17,7 @@ public class AttendanceController : ControllerBase
 
     // GET: api/attendances/session/{sessionId}
     // Lấy danh sách điểm danh của một buổi học
+    [Authorize(Policy = "AttendanceViewPolicy")]
     [HttpGet("session/{sessionId:guid}")]
     public async Task<IActionResult> GetBySessionId(Guid sessionId)
     {
@@ -27,6 +29,7 @@ public class AttendanceController : ControllerBase
 
     // GET: api/attendances/member/{memberId}
     // Lấy lịch sử điểm danh của một học viên
+    [Authorize(Policy = "AttendanceViewPolicy")]
     [HttpGet("member/{memberId:guid}")]
     public async Task<IActionResult> GetByMemberId(Guid memberId)
     {
@@ -38,6 +41,7 @@ public class AttendanceController : ControllerBase
 
     // POST: api/attendances
     // Điểm danh học viên
+    [Authorize(Policy = "CoachAndReceptionPolicy")]
     [HttpPost]
     public async Task<IActionResult> RecordAttendance(
         [FromBody] Request.RecordAttendanceRequest request)
@@ -50,6 +54,7 @@ public class AttendanceController : ControllerBase
 
     // PUT: api/attendances/{id}
     // Cập nhật trạng thái điểm danh
+    [Authorize(Policy = "CoachAndReceptionPolicy")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAttendance(
         Guid id,

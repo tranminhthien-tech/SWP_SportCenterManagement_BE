@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.ClassSession;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions
     // Lấy danh sách tất cả buổi học
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -26,6 +29,7 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions/{id}
     // Lấy thông tin buổi học theo ID
+    [Authorize]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -44,6 +48,7 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions/class/{classId}
     // Lấy danh sách buổi học của một lớp
+    [Authorize]
     [HttpGet("class/{classId:guid}")]
     public async Task<IActionResult> GetByClassId(Guid classId)
     {
@@ -54,6 +59,7 @@ public class ClassSessionController : ControllerBase
 
     // POST: api/class-sessions
     // Tạo buổi học mới
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateClassSessionRequest request)
@@ -69,6 +75,7 @@ public class ClassSessionController : ControllerBase
 
     // PUT: api/class-sessions/{id}
     // Cập nhật buổi học
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -89,6 +96,7 @@ public class ClassSessionController : ControllerBase
 
     // DELETE: api/class-sessions/{id}
     // Xóa buổi học
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

@@ -18,7 +18,7 @@ using SWP_SportCenter.Service.Receptionist;
 using SWP_SportCenter.Service.Room;
 using SWP_SportCenter.Service.SportCategory;
 using SWP_SportCenter.Service.Until;
-using AthuService = SWP_SportCenter.Service.Athu;
+using RegisterService = SWP_SportCenter.Service.Register;
 using MemberService = SWP_SportCenter.Service.Member;
 using MembershipPackageService = SWP_SportCenter.Service.MembershipPackage;
 using MembershipService = SWP_SportCenter.Service.Membership;
@@ -68,7 +68,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IReceptionistService, ReceptionistService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
-builder.Services.AddScoped<AthuService.IService, AthuService.Service>();
+builder.Services.AddScoped<RegisterService.IService, RegisterService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 
 var allowedOrigins = builder.Configuration

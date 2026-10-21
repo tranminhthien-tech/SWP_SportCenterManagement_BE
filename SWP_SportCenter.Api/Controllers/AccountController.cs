@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Accounts;
 
@@ -17,6 +19,7 @@ public class AccountController : ControllerBase
 
     // GET: api/accounts?searchTerm=&role=Receptionist&status=Active&pageSize=10&pageIndex=1
     // Không trả Password để dùng an toàn cho form chọn tài khoản/hồ sơ nhân viên.
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? searchTerm,
@@ -35,6 +38,7 @@ public class AccountController : ControllerBase
         return Ok(result);
     }
     
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateAccountRequest request)
@@ -46,6 +50,7 @@ public class AccountController : ControllerBase
 
 
     // GET: api/accounts/{id}
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -57,6 +62,7 @@ public class AccountController : ControllerBase
 
     // PUT: api/accounts/{id}
     // Cập nhật thông tin và trạng thái account. Password và role có API riêng để tránh ảnh hưởng hồ sơ liên quan.
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -70,6 +76,7 @@ public class AccountController : ControllerBase
 
     // DELETE: api/accounts/{id}
     // Xóa mềm: IsDeleted=true và chuyển account sang Inactive.
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
