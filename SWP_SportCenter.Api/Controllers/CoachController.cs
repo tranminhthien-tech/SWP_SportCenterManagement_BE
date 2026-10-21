@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Coach;
 
 namespace SWP_SportCenter.Controllers;
@@ -19,6 +21,7 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches
     // Lấy danh sách tất cả Coach
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -28,6 +31,7 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches/{id}
     // Lấy thông tin Coach theo ID
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -41,6 +45,7 @@ public class CoachController : ControllerBase
 
     // POST: api/coaches
     // Tạo hồ sơ Coach mới
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateCoachRequest request)
@@ -52,6 +57,7 @@ public class CoachController : ControllerBase
 
     // PUT: api/coaches/{id}
     // Cập nhật thông tin Coach
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -67,6 +73,7 @@ public class CoachController : ControllerBase
 
     // DELETE: api/coaches/{id}
     // Xóa Coach
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -80,6 +87,7 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches/me
     // Lấy thông tin Coach đang đăng nhập
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -98,6 +106,7 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches/me/classes
     // Lấy danh sách lớp học Coach đang phụ trách
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpGet("me/classes")]
     public async Task<IActionResult> GetMyClasses()
     {
@@ -118,6 +127,7 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches/me/members
     // Lấy danh sách học viên Coach đang phụ trách
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpGet("me/members")]
     public async Task<IActionResult> GetMyMembers()
     {

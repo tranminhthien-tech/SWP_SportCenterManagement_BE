@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Member;
 
 namespace SWP_SportCenter.Controllers;
@@ -15,6 +17,7 @@ public class MemberController: ControllerBase
     
     // GET /api/members
     // Lấy danh sách / tìm kiếm Member
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? searchTerm,
@@ -31,6 +34,7 @@ public class MemberController: ControllerBase
 
     // GET /api/members/{id}
     // Lấy chi tiết Member
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(
         [FromRoute] Guid id)
@@ -47,6 +51,7 @@ public class MemberController: ControllerBase
 
     // POST /api/members
     // Tạo Member
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.MemberRequest request)
@@ -58,6 +63,7 @@ public class MemberController: ControllerBase
 
     // PUT /api/members/{id}
     // Cập nhật Member
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         [FromRoute] Guid id,
@@ -75,6 +81,7 @@ public class MemberController: ControllerBase
 
     // DELETE /api/members/{id}
     // Xóa mềm Member
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(
         [FromRoute] Guid id)
@@ -91,6 +98,7 @@ public class MemberController: ControllerBase
 
     // GET /api/members/me
     // Xem profile của Member đang đăng nhập
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
@@ -106,6 +114,7 @@ public class MemberController: ControllerBase
 
     // PUT /api/members/me
     // Cập nhật profile của Member đang đăng nhập
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpPut("me")]
     public async Task<IActionResult> UpdateMyProfile(
         [FromBody] Request.MemberRequest request)
@@ -122,6 +131,7 @@ public class MemberController: ControllerBase
 
     // GET /api/members/{id}/summary
     // Lấy tổng quan Member
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpGet("{id:guid}/summary")]
     public async Task<IActionResult> GetSummary(
         [FromRoute] Guid id)

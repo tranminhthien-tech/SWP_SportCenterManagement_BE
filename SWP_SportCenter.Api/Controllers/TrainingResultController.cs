@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.TrainingResult;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class TrainingResultController : ControllerBase
 
     // GET: api/training-results/{id}
     // Lấy chi tiết kết quả tập luyện
+    [Authorize(Policy = JwtExtensions.ManagerOrCoachPolicy)]
     [HttpGet("training-results/{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -31,6 +34,7 @@ public class TrainingResultController : ControllerBase
 
     // GET: api/members/me/training-results
     // Lấy lịch sử kết quả của Member đang đăng nhập
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpGet("members/me/training-results")]
     public async Task<IActionResult> GetMyTrainingResults(
         [FromQuery] string? searchTerm,
@@ -47,6 +51,7 @@ public class TrainingResultController : ControllerBase
 
     // GET: api/coaches/me/members/{memberId}/training-results
     // Lấy tiến độ tập luyện của một Member
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpGet("coaches/me/members/{memberId:guid}/training-results")]
     public async Task<IActionResult> GetByMemberId(
         Guid memberId,
@@ -65,6 +70,7 @@ public class TrainingResultController : ControllerBase
 
     // POST: api/training-results
     // Ghi nhận kết quả và nhận xét của Coach
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpPost("training-results")]
     public async Task<IActionResult> Create(
         [FromBody] Request.TrainingResultRequest request)
@@ -76,6 +82,7 @@ public class TrainingResultController : ControllerBase
 
     // PUT: api/training-results/{id}
     // Cập nhật kết quả tập luyện
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpPut("training-results/{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -93,6 +100,7 @@ public class TrainingResultController : ControllerBase
 
     // DELETE: api/training-results/{id}
     // Xóa mềm kết quả tập luyện
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
     [HttpDelete("training-results/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {

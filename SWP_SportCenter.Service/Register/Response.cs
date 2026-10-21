@@ -1,4 +1,4 @@
-namespace SWP_SportCenter.Service.Athu;
+namespace SWP_SportCenter.Service.Register;
 
 public class Response
 {

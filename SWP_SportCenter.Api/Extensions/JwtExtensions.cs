@@ -16,6 +16,9 @@ public static class JwtExtensions
     public const string MemberPolicy = "MemberPolicy";
     public const string CoachPolicy = "CoachPolicy";
     public const string ReceptionistPolicy = "ReceptionistPolicy";
+    public const string ManagerOrReceptionistPolicy = "ManagerOrReceptionistPolicy";
+    public const string ManagerOrCoachPolicy = "ManagerOrCoachPolicy";
+    public const string StaffPolicy = "StaffPolicy";
 
     public static void AddJwtServices(
         this IServiceCollection services,
@@ -130,6 +133,7 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
+            // Policy cho từng role
             options.AddPolicy(CenterManagerPolicy, policy =>
                 policy.RequireRole(nameof(AccountRole.CenterManager)));
 
@@ -141,6 +145,32 @@ public static class JwtExtensions
 
             options.AddPolicy(ReceptionistPolicy, policy =>
                 policy.RequireRole(nameof(AccountRole.Receptionist)));
+
+            // Policy kết hợp: CenterManager hoặc Receptionist
+            options.AddPolicy("ManagerOrReceptionistPolicy", policy =>
+                policy.RequireRole(
+                    nameof(AccountRole.CenterManager),
+                    nameof(AccountRole.Receptionist)));
+
+            // Policy kết hợp: CenterManager hoặc Coach
+            options.AddPolicy("ManagerOrCoachPolicy", policy =>
+                policy.RequireRole(
+                    nameof(AccountRole.CenterManager),
+                    nameof(AccountRole.Coach)));
+            options.AddPolicy(StaffPolicy, policy =>
+                policy.RequireRole(
+                    nameof(AccountRole.CenterManager),
+                    nameof(AccountRole.Coach),
+                    nameof(AccountRole.Receptionist)));
+            options.AddPolicy("CoachAndReceptionPolicy", policy =>
+                policy.RequireRole(
+                    nameof(AccountRole.Coach),
+                    nameof(AccountRole.Receptionist)));
+            options.AddPolicy("AttendanceViewPolicy", policy =>
+                policy.RequireRole(
+                    nameof(AccountRole.Coach),
+                    nameof(AccountRole.Receptionist),
+                    nameof(AccountRole.CenterManager)));
         });
     }
 }

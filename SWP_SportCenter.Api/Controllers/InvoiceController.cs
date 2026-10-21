@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Invoice;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class InvoiceController : ControllerBase
 
     // GET: api/invoices
     // Lấy danh sách hóa đơn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -26,6 +29,7 @@ public class InvoiceController : ControllerBase
 
     // GET: api/invoices/{id}
     // Lấy thông tin chi tiết hóa đơn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -39,6 +43,7 @@ public class InvoiceController : ControllerBase
 
     // POST: api/invoices
     // Tạo hóa đơn mới
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateInvoiceRequest request)
@@ -50,6 +55,7 @@ public class InvoiceController : ControllerBase
 
     // PUT: api/invoices/{id}
     // Cập nhật hóa đơn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -65,6 +71,7 @@ public class InvoiceController : ControllerBase
 
     // DELETE: api/invoices/{id}
     // Xóa hóa đơn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -78,7 +85,8 @@ public class InvoiceController : ControllerBase
     
     // GET: api/members/me/invoices
 // Lấy danh sách hóa đơn của Member đang đăng nhập
-    [HttpGet("members/me/invoices")]
+    [Authorize(Policy = JwtExtensions.MemberPolicy)]
+    [HttpGet("members/me")]
     public async Task<IActionResult> GetMyInvoices()
     {
         var result = await _service.GetMyInvoicesAsync();
@@ -88,6 +96,7 @@ public class InvoiceController : ControllerBase
 
 // GET: api/invoices/{id}/export
 // Lấy thông tin hóa đơn để xem / xuất hóa đơn
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("invoices/{id:guid}/export")]
     public async Task<IActionResult> ExportInvoice(Guid id)
     {

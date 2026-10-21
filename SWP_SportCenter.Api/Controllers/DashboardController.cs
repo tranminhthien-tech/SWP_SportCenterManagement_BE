@@ -1,12 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Dashboard;
 
 namespace SWP_SportCenter.Controllers;
 
 [ApiController]
 [Route("api/dashboard")]
-[Authorize]
+[Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
 public class DashboardController : ControllerBase
 {
     private readonly IDashboardService _service;

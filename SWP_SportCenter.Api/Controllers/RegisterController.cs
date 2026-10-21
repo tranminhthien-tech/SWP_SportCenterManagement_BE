@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SWP_SportCenter.Service.Athu;
+using SWP_SportCenter.Service.Register;
+
 
 namespace SWP_SportCenter.Controllers;
 
@@ -15,6 +17,7 @@ public class AuthController : ControllerBase
     }
 
     // POST: /api/auth/register
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register(
         [FromBody] Request.RegisterRequest request)
@@ -25,6 +28,7 @@ public class AuthController : ControllerBase
     }
 
     // POST: /api/auth/login
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(
         [FromBody] Request.LoginRequest request)
@@ -35,6 +39,7 @@ public class AuthController : ControllerBase
     }
 
     // POST: /api/auth/logout
+    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -44,6 +49,7 @@ public class AuthController : ControllerBase
     }
 
     // POST: /api/auth/forgot-password
+    [AllowAnonymous]
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(
         [FromBody] Request.ForgotPasswordRequest request)
@@ -54,6 +60,7 @@ public class AuthController : ControllerBase
     }
 
     // POST: /api/auth/reset-password
+    [AllowAnonymous]
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(
         [FromBody] Request.ResetPasswordRequest request)
@@ -64,6 +71,7 @@ public class AuthController : ControllerBase
     }
 
     // GET: /api/auth/me
+    [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> GetMe()
     {

@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.MembershipPackage;
 
 namespace SWP_SportCenter.Controllers;
@@ -16,6 +18,7 @@ public class MembershipPackageController : ControllerBase
 
     // GET: api/membership-packages
     // Lấy danh sách gói tập, có phân trang và tìm kiếm
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? searchTerm,
@@ -32,6 +35,7 @@ public class MembershipPackageController : ControllerBase
 
     // GET: api/membership-packages/{id}
     // Lấy chi tiết gói tập
+    [Authorize]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -47,6 +51,7 @@ public class MembershipPackageController : ControllerBase
 
     // POST: api/membership-packages
     // Tạo gói tập mới
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.MembershipPackageRequest request)
@@ -58,6 +63,7 @@ public class MembershipPackageController : ControllerBase
 
     // PUT: api/membership-packages/{id}
     // Cập nhật gói tập
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -75,6 +81,7 @@ public class MembershipPackageController : ControllerBase
 
     // DELETE: api/membership-packages/{id}
     // Xóa mềm gói tập
+    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
