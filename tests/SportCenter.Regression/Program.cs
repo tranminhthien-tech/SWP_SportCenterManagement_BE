@@ -28,6 +28,9 @@ var store = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
 builder.Services.AddDbContext<AppDbContext>(o => o.UseInMemoryDatabase("regression", store));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentActor>();
+// FIX B23: cố định 23:30 ngày 23/10 tại Việt Nam (16:30 UTC) để bắt lỗi lệch ngày/timezone.
+var bookingNow = new DateTimeOffset(2026, 10, 23, 16, 30, 0, TimeSpan.Zero);
+builder.Services.AddSingleton<TimeProvider>(new FixedClock(bookingNow));
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddAuthentication(o => { o.DefaultAuthenticateScheme = "Test"; o.DefaultChallengeScheme = "Test"; })
     .AddScheme<AuthenticationSchemeOptions, TestAuth>("Test", _ => { });
@@ -72,7 +75,10 @@ var coach = new Coach { Id = Guid.NewGuid(), Account = coachAccount, FullName = 
 var receptionist = new Receptionist { Id = Guid.NewGuid(), Account = receptionistAccount, FullName = "Reception", Phone = "0900000004" };
 var category = new SportCategory { Id = Guid.NewGuid(), CategoryName = "Fitness" };
 var cls = new Class { Id = Guid.NewGuid(), ClassName = "Gym", Coach = coach, Category = category, MaxCapacity = 12, StartDate = DateTime.UtcNow, EndDate = DateTime.UtcNow.AddDays(20) };
-var session = new ClassSession { Id = Guid.NewGuid(), Class = cls, Date = DateOnly.FromDateTime(DateTime.UtcNow) };
+// CODE CŨ: session chỉ có Date hôm nay, thiếu EndTime.
+// FIX B23: fixture booking có buổi học tương lai rõ ràng.
+var session = new ClassSession { Id = Guid.NewGuid(), Class = cls, Date = DateOnly.FromDateTime(bookingNow.ToOffset(TimeSpan.FromHours(7)).DateTime).AddDays(1),
+    StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(9) };
 var package = new MembershipPackage { Id = Guid.NewGuid(), PackageName = "Monthly", DurationDays = 30, Price = 100 };
 var membership = new Membership { Id = Guid.NewGuid(), Member = member, Package = package, StartDate = DateTime.UtcNow.AddDays(-20), EndDate = DateTime.UtcNow.AddDays(10), Status = MembershipStatus.Active };
 var plan = new TrainingPlan { Id = Guid.NewGuid(), Coach = coach, Member = member, Class = cls, Title = "Strength plan", CreatedDate = DateTime.UtcNow };
@@ -150,6 +156,25 @@ using (var scope = app.Services.CreateScope()) {
  Check(saved.Phone == "0900000010" && saved.Dob!.Value.Year == 2001 && saved.TrainingGoal == "Strength", "B3 B18 real profile values persisted");
 }
 Login(coachAccount);
+// FIX B25: request có scope DbContext mới nên không thể dựa vào tracking/fixup từ dữ liệu seed.
+var coachProfile = await http.GetAsync("/api/coaches/me");
+Check(coachProfile.IsSuccessStatusCode && (await Json(coachProfile)).GetProperty("email").GetString() == coachAccount.Email,
+    "B25 Coach me loads Account email");
+Check((await http.GetAsync("/api/coaches/me/classes")).IsSuccessStatusCode, "B25 Coach me classes succeeds");
+Check((await http.GetAsync("/api/coaches/me/members")).IsSuccessStatusCode, "B25 Coach me members succeeds");
+http.DefaultRequestHeaders.Authorization = null;
+var publicCoach = await http.GetAsync("/api/coaches/" + coach.Id);
+Check(publicCoach.IsSuccessStatusCode && !(await Json(publicCoach)).TryGetProperty("email", out _),
+    "B25 public Coach detail succeeds without leaking email");
+Login(manager);
+var staffCoach = await http.GetAsync("/api/coaches/" + coach.Id);
+Check(staffCoach.IsSuccessStatusCode && (await Json(staffCoach)).GetProperty("email").GetString() == coachAccount.Email,
+    "B25 staff Coach detail includes Account email");
+Login(coachAccount);
+var missingCoachAccount = Account(AccountRole.Coach, "no-profile");
+Login(missingCoachAccount);
+Check((await http.GetAsync("/api/coaches/me")).StatusCode == HttpStatusCode.NotFound, "B25 missing Coach profile returns 404");
+Login(coachAccount);
 var results = await http.GetAsync("/api/coaches/me/training-results?pageSize=500");
 Check(results.IsSuccessStatusCode && (await Json(results)).GetProperty("data")[0].GetProperty("planTitle").GetString() == plan.Title, "B13 coach result listing includes plan title");
 var plans = await http.GetAsync("/api/coaches/me/training-plans");
@@ -164,6 +189,44 @@ using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string
     var migrator = schema.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
     var sql = migrator.GenerateScript("20261010024745_fixdate", "20261022020000_MemberUnknownContact");
     Check(sql.Contains("ALTER TABLE account ADD full_name") && sql.Contains("ALTER TABLE member ALTER COLUMN phone DROP NOT NULL"), "PostgreSQL migration SQL generated without connection");
+}
+// FIX B23: kiểm tra qua HTTP cả Member và staff, không ghi database Render.
+var vnNow = bookingNow.ToOffset(TimeSpan.FromHours(7));
+var vnDate = DateOnly.FromDateTime(vnNow.DateTime);
+var scenarios = new[] {
+    ("No sessions", (DateOnly?)null, TimeSpan.Zero, false, ClassStatus.Ongoing, false),
+    ("Past day", (DateOnly?)vnDate.AddDays(-1), TimeSpan.FromHours(23.9), false, ClassStatus.Ongoing, false),
+    ("Ended today", (DateOnly?)vnDate, TimeSpan.FromHours(23), false, ClassStatus.Ongoing, false),
+    ("Ends exactly now", (DateOnly?)vnDate, vnNow.TimeOfDay, false, ClassStatus.Ongoing, false),
+    ("In progress", (DateOnly?)vnDate, TimeSpan.FromHours(23.75), false, ClassStatus.Ongoing, true),
+    ("Tomorrow", (DateOnly?)vnDate.AddDays(1), TimeSpan.FromHours(1), false, ClassStatus.Ongoing, true),
+    ("Deleted future session", (DateOnly?)vnDate.AddDays(1), TimeSpan.FromHours(1), true, ClassStatus.Ongoing, false),
+    ("Completed with future session", (DateOnly?)vnDate.AddDays(1), TimeSpan.FromHours(1), false, ClassStatus.Completed, false),
+    ("Cancelled with future session", (DateOnly?)vnDate.AddDays(1), TimeSpan.FromHours(1), false, ClassStatus.Cancelled, false)
+};
+foreach (var staff in new[] { false, true })
+foreach (var scenario in scenarios) {
+    Guid classId;
+    using (var scope = app.Services.CreateScope()) {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var item = new Class { Id = Guid.NewGuid(), ClassName = scenario.Item1,
+            CoachId = coach.Id, CategoryId = category.Id, MaxCapacity = 10, Status = scenario.Item5,
+            StartDate = bookingNow.UtcDateTime.AddDays(-1), EndDate = bookingNow.UtcDateTime.AddDays(7) };
+        db.Classes.Add(item);
+        if (scenario.Item2.HasValue) db.ClassSessions.Add(new ClassSession {
+            Id = Guid.NewGuid(), Class = item, Date = scenario.Item2.Value,
+            StartTime = scenario.Item3 > TimeSpan.FromHours(1) ? scenario.Item3 - TimeSpan.FromHours(1) : TimeSpan.Zero,
+            EndTime = scenario.Item3, IsDeleted = scenario.Item4
+        });
+        await db.SaveChangesAsync(); classId = item.Id;
+    }
+    Login(staff ? receptionistAccount : memberAccount);
+    var response = await http.PostAsJsonAsync("/api/class-bookings", new { memberId = member.Id, classId });
+    Check(scenario.Item6 ? response.IsSuccessStatusCode : response.StatusCode == HttpStatusCode.BadRequest,
+        $"B23 {(staff ? "staff" : "member")} {scenario.Item1}");
+    using var verify = app.Services.CreateScope();
+    var count = await verify.ServiceProvider.GetRequiredService<AppDbContext>().ClassBookings.CountAsync(b => b.ClassId == classId);
+    Check(count == (scenario.Item6 ? 1 : 0), $"B23 no unintended booking saved {staff} {scenario.Item1}");
 }
 Console.WriteLine($"RESULT {passed} checks passed");
 await app.StopAsync();
@@ -181,4 +244,9 @@ sealed class TestAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILog
             new Claim(ClaimTypes.NameIdentifier, parts[0]), new Claim(ClaimTypes.Role, parts[1]) }, "Test"));
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, "Test")));
     }
+}
+
+sealed class FixedClock(DateTimeOffset now) : TimeProvider
+{
+    public override DateTimeOffset GetUtcNow() => now;
 }

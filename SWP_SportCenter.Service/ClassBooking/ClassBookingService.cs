@@ -12,13 +12,19 @@ public class ClassBookingService : IClassBookingService
 {
     private readonly AppDbContext _context;
     private readonly SWP_SportCenter.Service.Security.CurrentActor _actor;
+    // FIX B23 2026-10-23: clock có thể cố định trong test, production dùng UTC thật.
+    private readonly TimeProvider _clock;
 
     // CODE CŨ: constructor chỉ nhận DbContext.
     // FIX B7: lấy MemberId từ danh tính đã xác thực.
-    public ClassBookingService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor)
+    // CODE CŨ: constructor chỉ nhận context và actor.
+    // FIX B23: clock tùy chọn giữ tương thích các caller hiện có.
+    public ClassBookingService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor,
+        TimeProvider? clock = null)
     {
         _context = context;
         _actor = actor;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<IEnumerable<Response.BookingResponse>> GetMemberBookingsAsync(Guid memberId)
@@ -62,6 +68,19 @@ public class ClassBookingService : IClassBookingService
             // CODE CŨ: throw new Exception("Lớp học này đã kết thúc hoặc bị hủy, không thể đăng ký.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
             throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp học này đã kết thúc hoặc bị hủy, không thể đăng ký.");
+
+        // CODE CŨ: chỉ kiểm tra status Completed/Cancelled rồi kiểm tra trùng booking.
+        // FIX B23 2026-10-23: status Ongoing có thể chưa cập nhật dù mọi buổi đã kết thúc.
+        // Date/EndTime của lịch học là giờ Việt Nam (UTC+7), không dùng timezone của server Render.
+        var localNow = _clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7));
+        var today = DateOnly.FromDateTime(localNow.DateTime);
+        var currentTime = localNow.TimeOfDay;
+        var hasUnfinishedSession = await _context.ClassSessions.AsNoTracking().AnyAsync(s =>
+            s.ClassId == request.ClassId && !s.IsDeleted &&
+            (s.Date > today || (s.Date == today && s.EndTime > currentTime)));
+        if (!hasUnfinishedSession)
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException(
+                "Lớp học chưa có lịch hoặc tất cả buổi học đã kết thúc, không thể đăng ký.");
 
         // 2. Kiểm tra xem Học viên đã đăng ký lớp này chưa (chống Duplicate Booking)
         var isAlreadyBooked = await _context.ClassBookings
