@@ -38,7 +38,11 @@ public class CoachService : ICoachService
 
     public async Task<Response.CoachResponse?> GetByIdAsync(Guid id)
     {
-        var coach = await _context.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+        // CODE CŨ: var coach = await _context.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+        // FIX B25 2026-10-23: MapToResponse đọc Account.Email nên phải tải Account cùng Coach.
+        var coach = await _context.Coaches.AsNoTracking()
+            .Include(c => c.Account)
+            .FirstOrDefaultAsync(c => c.Id == id);
         if (coach == null) return null;
 
         return MapToResponse(coach);
@@ -46,7 +50,11 @@ public class CoachService : ICoachService
 
     public async Task<Response.CoachResponse?> GetByAccountIdAsync(Guid accountId)
     {
-        var coach = await _context.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.AccountId == accountId);
+        // CODE CŨ: var coach = await _context.Coaches.AsNoTracking().FirstOrDefaultAsync(c => c.AccountId == accountId);
+        // FIX B25 2026-10-23: các route /me, /me/classes, /me/members cần cả Account để map response.
+        var coach = await _context.Coaches.AsNoTracking()
+            .Include(c => c.Account)
+            .FirstOrDefaultAsync(c => c.AccountId == accountId);
         if (coach == null) return null;
 
         return MapToResponse(coach);
