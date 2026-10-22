@@ -98,7 +98,9 @@ public class ClassSessionService : IClassSessionService
         _context.ClassSessions.Add(newSession);
         await _context.SaveChangesAsync();
 
-        return await GetByIdAsync(newSession.Id) ?? throw new Exception("Lỗi khi tạo lịch học.");
+        // CODE CŨ: return await GetByIdAsync(newSession.Id) ?? throw new Exception("Lỗi khi tạo lịch học.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        return await GetByIdAsync(newSession.Id) ?? throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lỗi khi tạo lịch học.");
     }
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateClassSessionRequest request)
@@ -129,7 +131,9 @@ public class ClassSessionService : IClassSessionService
             var hasAttendance = await _context.Attendances.AnyAsync(a => a.SessionId == id);
             if (hasAttendance)
             {
-                throw new Exception("Không thể xóa buổi học này vì đã có dữ liệu điểm danh.");
+                // CODE CŨ: throw new Exception("Không thể xóa buổi học này vì đã có dữ liệu điểm danh.");
+                // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+                throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa buổi học này vì đã có dữ liệu điểm danh.");
             }
 
             _context.ClassSessions.Remove(session);
@@ -232,7 +236,10 @@ public class ClassSessionService : IClassSessionService
     // 1. Kiểm tra thời gian
     if (startTime >= endTime)
     {
-        throw new Exception(
+        // CODE CŨ: throw new Exception(
+        //             "Thời gian kết thúc phải lớn hơn thời gian bắt đầu.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException(
             "Thời gian kết thúc phải lớn hơn thời gian bắt đầu.");
     }
 
@@ -243,7 +250,9 @@ public class ClassSessionService : IClassSessionService
 
     if (classEntity == null)
     {
-        throw new Exception("Lớp học không tồn tại.");
+        // CODE CŨ: throw new Exception("Lớp học không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp học không tồn tại.");
     }
 
     // 3. Kiểm tra ngày học nằm trong thời gian mở lớp
@@ -252,7 +261,12 @@ public class ClassSessionService : IClassSessionService
 
     if (date < classStartDate || date > classEndDate)
     {
-        throw new Exception(
+        // CODE CŨ: throw new Exception(
+        //             $"Ngày xếp lịch phải nằm trong khoảng thời gian diễn ra lớp học " +
+        //             $"({classEntity.StartDate:dd/MM/yyyy} - " +
+        //             $"{classEntity.EndDate:dd/MM/yyyy}).");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException(
             $"Ngày xếp lịch phải nằm trong khoảng thời gian diễn ra lớp học " +
             $"({classEntity.StartDate:dd/MM/yyyy} - " +
             $"{classEntity.EndDate:dd/MM/yyyy}).");
@@ -265,13 +279,18 @@ public class ClassSessionService : IClassSessionService
 
     if (room == null)
     {
-        throw new Exception("Phòng tập không tồn tại.");
+        // CODE CŨ: throw new Exception("Phòng tập không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException("Phòng tập không tồn tại.");
     }
 
     // 5. Kiểm tra trạng thái phòng
     if (room.Status != RoomStatus.Available)
     {
-        throw new Exception(
+        // CODE CŨ: throw new Exception(
+        //             $"Phòng tập \"{room.RoomName}\" đang tạm ngưng sử dụng.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException(
             $"Phòng tập \"{room.RoomName}\" đang tạm ngưng sử dụng.");
     }
 
@@ -290,7 +309,12 @@ public class ClassSessionService : IClassSessionService
     // 7. Báo lỗi nếu thời gian bị trùng
     if (conflictingSession != null)
     {
-        throw new Exception(
+        // CODE CŨ: throw new Exception(
+        //             $"Phòng tập \"{room.RoomName}\" đã có lịch sử dụng từ " +
+        //             $"{conflictingSession.StartTime:hh\\:mm} đến " +
+        //             $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        throw new SWP_SportCenter.Service.Exceptions.BusinessException(
             $"Phòng tập \"{room.RoomName}\" đã có lịch sử dụng từ " +
             $"{conflictingSession.StartTime:hh\\:mm} đến " +
             $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");

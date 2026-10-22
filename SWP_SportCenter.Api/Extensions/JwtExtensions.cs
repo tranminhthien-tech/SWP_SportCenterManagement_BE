@@ -39,6 +39,8 @@ public static class JwtExtensions
                 "JwtOptions:Audience is not configured.");
 
         var key = Encoding.UTF8.GetBytes(secretKey);
+        // FIX B12: không chạy với secret thiếu/yếu sau khi chuyển sang env.
+        if (key.Length < 32) throw new InvalidOperationException("JwtOptions:SecretKey must contain at least 32 bytes.");
 
         services
             .AddAuthentication(options =>

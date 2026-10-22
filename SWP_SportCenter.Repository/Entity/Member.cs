@@ -9,11 +9,15 @@ public class Member: BaseEntity, IAuditableEntity
 
     public string FullName { get; set; } = string.Empty;
 
-    public DateTime Dob { get; set; }
+    // CODE CŨ: public DateTime Dob { get; set; }
+    // FIX B18: hồ sơ cũ chưa biết ngày sinh lưu null.
+    public DateTime? Dob { get; set; }
 
     public string Gender { get; set; } = string.Empty;
 
-    public string Phone { get; set; } = string.Empty;
+    // CODE CŨ: public string Phone { get; set; } = string.Empty;
+    // FIX B18: chưa biết phone thật thì null.
+    public string? Phone { get; set; }
     
     public string Avatar { get; set; } = string.Empty;
 

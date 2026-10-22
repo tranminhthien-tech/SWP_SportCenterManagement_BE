@@ -2,6 +2,9 @@ namespace SWP_SportCenter.Service.Membership;
 
 public interface IService
 {
+    // FIX B20: sửa thông tin kỳ hạn và xóa mềm để giữ lịch sử tham chiếu.
+    Task<bool> UpdateAsync(Guid id, Request.UpdateMembershipRequest request);
+    Task<bool> DeleteAsync(Guid id);
     // GET: /api/memberships
     // Lấy danh sách membership tổng quát cho lễ tân/quản lý
     public Task<Base.Response.PageResult<Response.MembershipResponse>>
@@ -39,7 +42,9 @@ public interface IService
     // POST: /api/memberships/{id}/renew
     // Gia hạn membership
     public Task<Response.MembershipResponse?>
-        RenewAsync(Guid id);
+        // CODE CŨ: RenewAsync(Guid id);
+        // FIX B20: Manager chỉ định Lễ tân lập hóa đơn, Lễ tân dùng chính mình.
+        RenewAsync(Guid id, Guid? receptionistId = null);
 
     // POST: /api/memberships/{id}/cancel
     // Hủy membership

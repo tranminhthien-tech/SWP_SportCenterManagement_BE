@@ -22,8 +22,12 @@ public class NotificationController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetMyNotifications(
         [FromQuery] bool? isRead,
-        [FromQuery] int pageIndex = 1,
-        [FromQuery] int pageSize = 10)
+        // CODE CŨ: [FromQuery] int pageIndex = 1,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1,
+        // CODE CŨ: [FromQuery] int pageSize = 10)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10)
     {
         var result = await _service.GetMyNotificationsAsync(isRead, pageIndex, pageSize);
         return Ok(result);

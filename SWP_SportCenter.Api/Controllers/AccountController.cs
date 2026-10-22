@@ -26,8 +26,12 @@ public class AccountController : ControllerBase
         [FromQuery] string? searchTerm,
         [FromQuery] AccountRole? role,
         [FromQuery] AccountStatus? status,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1,
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1,
         [FromQuery] bool? hasProfile = null) // FIX: hỗ trợ dropdown tài khoản chưa có hồ sơ.
     {
         var result = await _accountService.GetAllAsync(

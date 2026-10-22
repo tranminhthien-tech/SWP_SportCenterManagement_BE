@@ -73,14 +73,20 @@ public class InvoiceService : IInvoiceService
     public async Task<Response.InvoiceResponse> CreateAsync(Request.CreateInvoiceRequest request)
     {
         var receptionistExists = await _context.Receptionists.AnyAsync(r => r.Id == request.ReceptionistId);
-        if (!receptionistExists) throw new Exception("Lễ tân (Receptionist) không tồn tại.");
+        // CODE CŨ: if (!receptionistExists) throw new Exception("Lễ tân (Receptionist) không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (!receptionistExists) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lễ tân (Receptionist) không tồn tại.");
 
         var memberMembershipExists = await _context.Memberships.AnyAsync(mm => mm.Id == request.MemberMembershipId);
-        if (!memberMembershipExists) throw new Exception("Lượt đăng ký gói tập không tồn tại.");
+        // CODE CŨ: if (!memberMembershipExists) throw new Exception("Lượt đăng ký gói tập không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (!memberMembershipExists) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lượt đăng ký gói tập không tồn tại.");
 
         // Bảng Invoice và MemberMembership có quan hệ 1-1 (1 lượt đăng ký chỉ có 1 hóa đơn)
         var existingInvoice = await _context.Invoices.AnyAsync(i => i.MemberMembershipId == request.MemberMembershipId);
-        if (existingInvoice) throw new Exception("Gói đăng ký này đã được xuất hóa đơn.");
+        // CODE CŨ: if (existingInvoice) throw new Exception("Gói đăng ký này đã được xuất hóa đơn.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (existingInvoice) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Gói đăng ký này đã được xuất hóa đơn.");
 
         var newInvoice = new Repository.Entity.Invoice
         {
@@ -95,7 +101,9 @@ public class InvoiceService : IInvoiceService
         _context.Invoices.Add(newInvoice);
         await _context.SaveChangesAsync();
 
-        return await GetByIdAsync(newInvoice.Id) ?? throw new Exception("Lỗi khi tạo hóa đơn.");
+        // CODE CŨ: return await GetByIdAsync(newInvoice.Id) ?? throw new Exception("Lỗi khi tạo hóa đơn.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        return await GetByIdAsync(newInvoice.Id) ?? throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lỗi khi tạo hóa đơn.");
     }
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateInvoiceRequest request)
@@ -126,7 +134,9 @@ public class InvoiceService : IInvoiceService
 
         // Chặn xóa nếu đã thanh toán
         if (invoice.Status == InvoiceStatus.Paid)
-            throw new Exception("Không thể xóa hóa đơn đã được thanh toán.");
+            // CODE CŨ: throw new Exception("Không thể xóa hóa đơn đã được thanh toán.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa hóa đơn đã được thanh toán.");
 
         _context.Invoices.Remove(invoice);
         await _context.SaveChangesAsync();
@@ -154,6 +164,8 @@ public class InvoiceService : IInvoiceService
                 i.Membership != null &&
                 i.Membership.Member != null &&
                 i.Membership.Member.AccountId == accountId)
+            // FIX B11: hóa đơn mới nhất trước.
+            .OrderByDescending(i => i.PaymentDate).ThenByDescending(i => i.CreatedAt)
             .Select(i => new Response.InvoiceResponse
             {
                 Id = i.Id,

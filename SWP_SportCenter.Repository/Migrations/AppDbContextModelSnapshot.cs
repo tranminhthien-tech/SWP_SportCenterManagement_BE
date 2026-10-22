@@ -22,7 +22,7 @@ namespace SWP_SportCenter.Repository.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
+modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -102,6 +102,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "member@demo.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "",
                             Role = 1,
@@ -113,6 +116,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "coach@demo.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
@@ -124,6 +130,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "receptionist@demo.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 3,
@@ -135,6 +144,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "manager@demo.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 4,
@@ -146,6 +158,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "yoga@sportcenter.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
@@ -157,6 +172,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("66666666-6666-6666-6666-666666666666"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "fitness@sportcenter.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
@@ -168,6 +186,9 @@ namespace SWP_SportCenter.Repository.Migrations
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "swim@sportcenter.com",
+                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
+                            FullName = "",
+                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
                             Role = 2,
@@ -618,7 +639,7 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.ToTable("invoice", (string)null);
                 });
 
-            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
+modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -639,7 +660,9 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime>("Dob")
+                    // CODE CŨ: b.Property<DateTime>("Dob")
+                    // FIX B18: nullable birthday.
+                    b.Property<DateTime?>("Dob")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("dob");
 
@@ -659,7 +682,7 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("boolean");
 
                     b.Property<string>("Phone")
-                        .IsRequired()
+                        // FIX B18: Phone nullable, unique index keeps real values unique.
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");

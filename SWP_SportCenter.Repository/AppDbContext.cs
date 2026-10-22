@@ -18,6 +18,11 @@ public class AppDbContext: DbContext
     {
         // FIX: đồng bộ thông tin cá nhân trước khi lưu/tháo hồ sơ, cùng transaction SaveChanges.
         await PreserveAccountContactAsync(cancellationToken);
+        // FIX B17: chuẩn hóa DateTime trước khi ghi timestamptz PostgreSQL.
+        foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
+            foreach (var property in entry.Properties.Where(p => p.CurrentValue is DateTime))
+                if (property.CurrentValue is DateTime date && date.Kind != DateTimeKind.Utc)
+                    property.CurrentValue = date.Kind == DateTimeKind.Local ? date.ToUniversalTime() : DateTime.SpecifyKind(date, DateTimeKind.Utc);
         StampAuditFields();
 
         return await base.SaveChangesAsync(
@@ -44,7 +49,9 @@ public class AppDbContext: DbContext
                 new object[] { contact.Item1 }, cancellationToken);
             if (account == null) continue;
             account.FullName = contact.Item3;
-            account.Phone = contact.Item4;
+            // CODE CŨ: account.Phone = contact.Item4;
+            // FIX B18: profile cũ không có phone thật thì Account trả chuỗi rỗng.
+            account.Phone = contact.Item4 ?? string.Empty;
         }
     }
 
@@ -256,7 +263,8 @@ public class AppDbContext: DbContext
 
             builder.Property(x => x.Dob)
                 .HasColumnName("dob")
-                .IsRequired();
+                // CODE CŨ: .IsRequired();
+                .IsRequired(false); // FIX B18: cho phép ngày sinh chưa biết.
 
             builder.Property(x => x.Gender)
                 .HasColumnName("gender")
@@ -265,7 +273,8 @@ public class AppDbContext: DbContext
             builder.Property(x => x.Phone)
                 .HasColumnName("phone")
                 .HasMaxLength(20)
-                .IsRequired();
+                // CODE CŨ: .IsRequired();
+                .IsRequired(false); // FIX B18: PostgreSQL unique cho phép nhiều null.
             
 
             builder.Property(x => x.Avatar)

@@ -18,8 +18,10 @@ public class ClassController : ControllerBase
 
     // GET: api/classes
     // Lấy danh sách lớp học
-    [Authorize]
     [HttpGet]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
         var result = await _service.GetAllAsync();
@@ -29,8 +31,10 @@ public class ClassController : ControllerBase
 
     // GET: api/classes/{id}
     // Lấy chi tiết lớp học
-    [Authorize]
     [HttpGet("{id:guid}")]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id)
     {
         var result = await _service.GetByIdAsync(id);

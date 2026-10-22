@@ -179,6 +179,13 @@ public class Service: IService
         var email = request.Email.Trim();
         var fullName = request.FullName.Trim();
 
+        // FIX B3: validate cả khi Service được gọi ngoài MVC.
+        System.ComponentModel.DataAnnotations.Validator.ValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), true);
+        var phone = request.Phone.Trim();
+        if (await _dbContext.Members.AnyAsync(m => m.Phone == phone))
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException("Số điện thoại này đã được sử dụng.");
+
         if (string.IsNullOrWhiteSpace(username))
             throw new ArgumentException("Username không được để trống");
 
@@ -197,7 +204,10 @@ public class Service: IService
     
         if (usernameExists)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Username already exists");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Username already exists");
         }
     
@@ -207,7 +217,10 @@ public class Service: IService
     
         if (emailExists)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Email already exists");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Email already exists");
         }
     
@@ -238,14 +251,19 @@ public class Service: IService
             Id = Guid.NewGuid(),
             Account = account,
             FullName = fullName,
-            Dob = DateTime.UtcNow.Date,
-            Gender = string.Empty,
-            Phone = string.Empty,
+            // CODE CŨ: Dob = DateTime.UtcNow.Date, Gender = string.Empty, Phone = string.Empty,
+            // FIX B3 B18: lưu dữ liệu thật do người dùng cung cấp.
+            Dob = DateTime.SpecifyKind(request.Dob.Date, DateTimeKind.Utc),
+            Gender = request.Gender?.Trim() ?? string.Empty,
+            Phone = phone,
             Avatar = string.Empty,
-            TrainingGoal = string.Empty
+            // CODE CŨ: TrainingGoal = string.Empty
+            // FIX B3: lưu mục tiêu tập luyện.
+            TrainingGoal = request.TrainingGoal?.Trim() ?? string.Empty
         };
 
-        member.Phone = $"pending-{member.Id:N}"[..20];
+        // CODE CŨ: member.Phone = $"pending-{member.Id:N}"[..20];
+        // FIX B18: không tạo số điện thoại giả.
 
         _dbContext.Members.Add(member);
         await _dbContext.SaveChangesAsync();

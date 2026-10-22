@@ -119,6 +119,9 @@ public class NotificationService : INotificationService
                 IsRead = false
             }).ToList();
 
+        // FIX B16: không First() danh sách rỗng, không lưu khi không có người nhận.
+        if (notifications.Count == 0)
+            throw new ArgumentException("Không có người nhận hợp lệ.");
         _db.Notifications.AddRange(notifications);
         await _db.SaveChangesAsync();
 
@@ -127,6 +130,8 @@ public class NotificationService : INotificationService
         return new Response.NotificationResponse
         {
             Id = first.Id,
+            // FIX B16: số người nhận hợp lệ sau khi lọc Account trùng/không tồn tại.
+            SentCount = notifications.Count,
             AccountId = first.AccountId,
             Title = first.Title,
             Message = first.Message,

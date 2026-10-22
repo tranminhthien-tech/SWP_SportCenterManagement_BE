@@ -18,8 +18,10 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions
     // Lấy danh sách tất cả buổi học
-    [Authorize]
     [HttpGet]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetAll()
     {
         var result = await _classSessionService.GetAllAsync();
@@ -29,8 +31,10 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions/{id}
     // Lấy thông tin buổi học theo ID
-    [Authorize]
     [HttpGet("{id:guid}")]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id)
     {
         var result = await _classSessionService.GetByIdAsync(id);
@@ -48,8 +52,10 @@ public class ClassSessionController : ControllerBase
 
     // GET: api/class-sessions/class/{classId}
     // Lấy danh sách buổi học của một lớp
-    [Authorize]
     [HttpGet("class/{classId:guid}")]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetByClassId(Guid classId)
     {
         var result = await _classSessionService.GetByClassIdAsync(classId);

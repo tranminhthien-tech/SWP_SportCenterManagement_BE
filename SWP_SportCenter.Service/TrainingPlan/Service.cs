@@ -79,6 +79,10 @@ public class Service: IService
             CoachId = trainingPlan.CoachId,
             MemberId = trainingPlan.MemberId,
             ClassId = trainingPlan.ClassId,
+            // FIX B13: kèm tên hiển thị để FE không ghép ID.
+            MemberName = trainingPlan.Member.FullName,
+            CoachName = trainingPlan.Coach.FullName,
+            ClassName = trainingPlan.Class.ClassName,
             Title = trainingPlan.Title,
             ContentDescription = trainingPlan.ContentDescription,
             CreatedDate = trainingPlan.CreatedDate,
@@ -100,6 +104,10 @@ public class Service: IService
                 CoachId = x.CoachId,
                 MemberId = x.MemberId,
                 ClassId = x.ClassId,
+                // FIX B13: kèm tên hiển thị để FE không ghép ID.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                ClassName = x.Class.ClassName,
                 Title = x.Title,
                 ContentDescription = x.ContentDescription,
                 CreatedDate = x.CreatedDate,
@@ -153,6 +161,10 @@ public class Service: IService
                 CoachId = x.CoachId,
                 MemberId = x.MemberId,
                 ClassId = x.ClassId,
+                // FIX B13: kèm tên hiển thị để FE không ghép ID.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                ClassName = x.Class.ClassName,
                 Title = x.Title,
                 ContentDescription = x.ContentDescription,
                 CreatedDate = x.CreatedDate,
@@ -211,6 +223,10 @@ public class Service: IService
                 CoachId = x.CoachId,
                 MemberId = x.MemberId,
                 ClassId = x.ClassId,
+                // FIX B13: kèm tên hiển thị để FE không ghép ID.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                ClassName = x.Class.ClassName,
                 Title = x.Title,
                 ContentDescription = x.ContentDescription,
                 CreatedDate = x.CreatedDate,
@@ -284,7 +300,9 @@ public class Service: IService
 
         await _dbContext.SaveChangesAsync();
 
-        return MapToResponse(trainingPlan);
+        // CODE CŨ: return MapToResponse(trainingPlan);
+        // FIX B13: query projection để lấy navigation names sau khi tạo.
+        return (await GetByIdAsync(trainingPlan.Id))!;
     }
 
     // PUT: /api/training-plans/{id}

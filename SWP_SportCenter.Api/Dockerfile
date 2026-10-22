@@ -21,5 +21,7 @@ RUN dotnet publish "./SWP_SportCenter.Api.csproj" -c $BUILD_CONFIGURATION -o /ap
 
 FROM base AS final
 WORKDIR /app
+# FIX B1 B6 B12: triển khai mặc định Production, không bật developer stack traces.
+ENV ASPNETCORE_ENVIRONMENT=Production
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "SWP_SportCenter.Api.dll"]

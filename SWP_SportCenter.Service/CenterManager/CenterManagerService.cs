@@ -118,7 +118,9 @@ public class CenterManagerService : ICenterManagerService
                 cm.Phone == request.Phone &&
                 cm.Id != id))
         {
-            throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+            // CODE CŨ: throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Số điện thoại này đã được sử dụng bởi người khác.");
         }
 
         // Kiểm tra Email trùng với Account khác
@@ -127,7 +129,9 @@ public class CenterManagerService : ICenterManagerService
                 a.Email == request.Email &&
                 a.Id != manager.AccountId))
         {
-            throw new Exception("Email này đã được sử dụng bởi người khác.");
+            // CODE CŨ: throw new Exception("Email này đã được sử dụng bởi người khác.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Email này đã được sử dụng bởi người khác.");
         }
 
         // Cập nhật thông tin CenterManager

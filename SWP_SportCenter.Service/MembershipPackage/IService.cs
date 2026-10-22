@@ -5,7 +5,9 @@ public interface IService
     // GET: api/membership-packages
     // Xem danh sách gói tập (có phân trang và tìm kiếm)
     public Task<Base.Response.PageResult<Response.MembershipPackageResponse>>
-        GetAllAsync( string? searchTerm, int pageIndex, int pageSize);
+        // CODE CŨ: GetAllAsync(string? searchTerm, int pageIndex, int pageSize);
+        // FIX B19: khớp thứ tự và tên tham số Service implementation.
+        GetAllAsync(string? searchTerm, int pageSize, int pageIndex);
 
     // GET: api/membership-packages/{id}
     // Xem chi tiết gói tập

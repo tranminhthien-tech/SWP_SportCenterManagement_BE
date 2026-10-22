@@ -203,7 +203,10 @@ public class ReceptionistService : IReceptionistService
             return false;
 
         if (receptionist.Account == null)
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Lễ tân chưa được liên kết với tài khoản.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Lễ tân chưa được liên kết với tài khoản.");
 
         var email = request.Email.Trim();
@@ -217,7 +220,10 @@ public class ReceptionistService : IReceptionistService
             a.Email == email);
 
         if (emailExists)
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Email đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Email đã được sử dụng.");
 
         await EnsureContactInformationIsAvailableAsync(
@@ -249,7 +255,10 @@ public class ReceptionistService : IReceptionistService
 
         if (hasInvoices)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Không thể xóa lễ tân vì đã có hóa đơn do lễ tân này lập.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Không thể xóa lễ tân vì đã có hóa đơn do lễ tân này lập.");
         }
 
@@ -292,7 +301,10 @@ public class ReceptionistService : IReceptionistService
 
         if (isPhoneUsed)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Số điện thoại này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Số điện thoại này đã được sử dụng.");
         }
     }

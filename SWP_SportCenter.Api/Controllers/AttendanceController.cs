@@ -29,7 +29,9 @@ public class AttendanceController : ControllerBase
 
     // GET: api/attendances/member/{memberId}
     // Lấy lịch sử điểm danh của một học viên
-    [Authorize(Policy = "AttendanceViewPolicy")]
+    // CODE CŨ: chỉ AttendanceViewPolicy.
+    // FIX B5: cho Member xem với kiểm tra ownership tại Service.
+    [Authorize(Roles = "Member,Coach,Receptionist,CenterManager")]
     [HttpGet("member/{memberId:guid}")]
     public async Task<IActionResult> GetByMemberId(Guid memberId)
     {
@@ -41,7 +43,9 @@ public class AttendanceController : ControllerBase
 
     // POST: api/attendances
     // Điểm danh học viên
-    [Authorize(Policy = "CoachAndReceptionPolicy")]
+    // CODE CŨ: CoachAndReceptionPolicy không có Manager.
+    // FIX B15: quyền ghi thống nhất với quyền xem.
+    [Authorize(Policy = "AttendanceViewPolicy")]
     [HttpPost]
     public async Task<IActionResult> RecordAttendance(
         [FromBody] Request.RecordAttendanceRequest request)
@@ -54,7 +58,9 @@ public class AttendanceController : ControllerBase
 
     // PUT: api/attendances/{id}
     // Cập nhật trạng thái điểm danh
-    [Authorize(Policy = "CoachAndReceptionPolicy")]
+    // CODE CŨ: CoachAndReceptionPolicy.
+    // FIX B15: Manager cũng được sửa điểm danh.
+    [Authorize(Policy = "AttendanceViewPolicy")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAttendance(
         Guid id,

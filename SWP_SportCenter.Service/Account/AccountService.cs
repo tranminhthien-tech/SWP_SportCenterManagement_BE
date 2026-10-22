@@ -245,7 +245,10 @@ public class AccountService : IAccountService
 
         if (usernameExists)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Username đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Username đã được sử dụng.");
         }
 
@@ -256,7 +259,10 @@ public class AccountService : IAccountService
 
         if (emailExists)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Email đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Email đã được sử dụng.");
         }
 
@@ -276,7 +282,9 @@ public class AccountService : IAccountService
 
         if (phoneExists)
         {
-            throw new InvalidOperationException("Phone đã được sử dụng.");
+            // CODE CŨ: throw new InvalidOperationException("Phone đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException("Phone đã được sử dụng.");
         }
 
         // Update account information
@@ -313,7 +321,9 @@ public class AccountService : IAccountService
                             Id = Guid.NewGuid(),
                             AccountId = account.Id,
                             FullName = fullName,
-                            Dob = DateTime.UtcNow.Date,
+                            // CODE CŨ: Dob = DateTime.UtcNow.Date,
+                            // FIX B18: thiếu ngày sinh thật để null.
+                            Dob = null,
                             Gender = string.Empty,
                             Avatar = string.Empty,
                             TrainingGoal = string.Empty
@@ -495,7 +505,9 @@ public async Task<Response.AccountResponse> CreateAsync(
 
                 // Giá trị tạm thời vì form hiện chưa có ngày sinh.
                 // Nên bổ sung Dob vào form tạo Member.
-                Dob = DateTime.UtcNow.Date
+                // CODE CŨ: Dob = DateTime.UtcNow.Date
+                // FIX B18: tạo Member bởi staff có thể bổ sung ngày sinh sau.
+                Dob = null
             };
 
             _dbContext.Members.Add(member);
