@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using SWP_SportCenter.Repository.Enum;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Service.Coach;
 
@@ -56,14 +57,20 @@ public class CoachService : ICoachService
 {
     // Lấy Account
     var account = await _context.Accounts
-        .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+        // CODE CŨ: chỉ lọc AccountId.
+        // FIX: chỉ cho phép tạo hồ sơ với tài khoản chưa xóa và đang Active.
+        .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted && a.Status == AccountStatus.Active);
 
     if (account == null)
-        throw new Exception("Tài khoản (Account) không tồn tại.");
+        // CODE CŨ: throw new Exception("Tài khoản (Account) không tồn tại.");
+        // FIX 2026-10-22: Controller trả lỗi nghiệp vụ dưới dạng 400 JSON.
+        throw new BusinessException("Tài khoản (Account) không tồn tại.");
 
     // Kiểm tra Role
     if (account.Role != AccountRole.Coach)
-        throw new Exception(
+        // CODE CŨ: throw new Exception("Tài khoản này không có vai trò Huấn luyện viên (Coach).");
+        // FIX 2026-10-22: dùng lỗi nghiệp vụ riêng.
+        throw new BusinessException(
             "Tài khoản này không có vai trò Huấn luyện viên (Coach).");
 
     // Kiểm tra Account đã có profile Coach chưa
@@ -71,7 +78,9 @@ public class CoachService : ICoachService
         .AnyAsync(c => c.AccountId == request.AccountId);
 
     if (isProfileExist)
-        throw new Exception(
+        // CODE CŨ: throw new Exception("Tài khoản này đã có hồ sơ Huấn luyện viên.");
+        // FIX 2026-10-22: tạo trùng profile là lỗi nghiệp vụ, không phải lỗi hệ thống.
+        throw new BusinessException(
             "Tài khoản này đã có hồ sơ Huấn luyện viên.");
 
     // Kiểm tra số điện thoại
@@ -79,7 +88,9 @@ public class CoachService : ICoachService
         .AnyAsync(c => c.Phone == request.Phone);
 
     if (isPhoneExist)
-        throw new Exception(
+        // CODE CŨ: throw new Exception("Số điện thoại này đã được sử dụng.");
+        // FIX 2026-10-22: dùng lỗi nghiệp vụ riêng.
+        throw new BusinessException(
             "Số điện thoại này đã được sử dụng.");
 
     // Không kiểm tra Coach.Email nữa.
@@ -90,7 +101,9 @@ public class CoachService : ICoachService
             a.Id != request.AccountId);
 
     if (isEmailExist)
-        throw new Exception(
+        // CODE CŨ: throw new Exception("Email này đã được sử dụng.");
+        // FIX 2026-10-22: dùng lỗi nghiệp vụ riêng.
+        throw new BusinessException(
             "Email này đã được sử dụng.");
 
     // Nếu request.Email khác Email hiện tại của Account
@@ -110,7 +123,9 @@ public class CoachService : ICoachService
 
     _context.Coaches.Add(newCoach);
 
-    await _context.SaveChangesAsync();
+    // CODE CŨ: await _context.SaveChangesAsync();
+    // FIX: chuyển unique violation khi tạo hồ sơ thành lỗi nghiệp vụ JSON.
+    await _context.SaveProfileChangesAsync();
 
     // MapToResponse sẽ lấy Email từ newCoach.Account.Email
     newCoach.Account = account;

@@ -9,6 +9,10 @@ public class Account: BaseEntity, IAuditableEntity
     
     public string Email { get; set; } = string.Empty;
 
+    // FIX 2026-10-22: thông tin cá nhân tồn tại độc lập với hồ sơ nhân sự.
+    public string FullName { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+
     public string Password { get; set; } = string.Empty;
     
 

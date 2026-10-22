@@ -62,14 +62,23 @@ public class DashboardService : IDashboardService
                 !m.Account.IsDeleted &&
                 m.CreatedAt >= thirtyDaysAgo);
 
-        var activeMembers = await _db.Memberships
+        // CODE CŨ: đếm Member có Membership còn hạn. Số này không khớp với trang Accounts.
+        // var activeMembers = await _db.Memberships
+        //     .AsNoTracking()
+        //     .Where(ms =>
+        //         ms.Status == MembershipStatus.Active &&
+        //         ms.EndDate >= now.Date)
+        //     .Select(ms => ms.MemberId)
+        //     .Distinct()
+        //     .CountAsync();
+
+        // FIX 2026-10-22: đếm đúng Account Member đang Active để Dashboard đồng bộ trang Accounts.
+        var activeMembers = await _db.Accounts
             .AsNoTracking()
-            .Where(ms =>
-                ms.Status == MembershipStatus.Active &&
-                ms.EndDate >= now.Date)
-            .Select(ms => ms.MemberId)
-            .Distinct()
-            .CountAsync();
+            .CountAsync(account =>
+                account.Role == AccountRole.Member &&
+                account.Status == AccountStatus.Active &&
+                !account.IsDeleted);
 
         return new Response.MemberSummaryResponse
         {

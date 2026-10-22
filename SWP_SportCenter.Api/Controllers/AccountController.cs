@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Accounts;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Controllers;
 
@@ -26,14 +27,16 @@ public class AccountController : ControllerBase
         [FromQuery] AccountRole? role,
         [FromQuery] AccountStatus? status,
         [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] bool? hasProfile = null) // FIX: hỗ trợ dropdown tài khoản chưa có hồ sơ.
     {
         var result = await _accountService.GetAllAsync(
             searchTerm,
             role,
             status,
             pageSize,
-            pageIndex);
+            pageIndex,
+            hasProfile);
 
         return Ok(result);
     }
@@ -43,9 +46,18 @@ public class AccountController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateAccountRequest request)
     {
-        var account = await _accountService.CreateAsync(request);
-
-        return Ok(account);
+        // CODE CŨ: var account = await _accountService.CreateAsync(request);
+        // CODE CŨ: return Ok(account);
+        // FIX 2026-10-22: trả lỗi nghiệp vụ dưới dạng 400 JSON cho FE.
+        try
+        {
+            var account = await _accountService.CreateAsync(request);
+            return Ok(account);
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
 
