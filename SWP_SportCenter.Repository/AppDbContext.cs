@@ -12,15 +12,40 @@ public class AppDbContext: DbContext
         : base(options)
     {
     }
-    public override Task<int> SaveChangesAsync(
+    public override async Task<int> SaveChangesAsync(
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
+        // FIX: đồng bộ thông tin cá nhân trước khi lưu/tháo hồ sơ, cùng transaction SaveChanges.
+        await PreserveAccountContactAsync(cancellationToken);
         StampAuditFields();
 
-        return base.SaveChangesAsync(
+        return await base.SaveChangesAsync(
             acceptAllChangesOnSuccess,
             cancellationToken);
+    }
+
+    // FIX 2026-10-22: mọi luồng tạo/sửa/xóa profile đều giữ tên/phone tại Account.
+    private async Task PreserveAccountContactAsync(CancellationToken cancellationToken)
+    {
+        foreach (var entry in ChangeTracker.Entries().Where(e =>
+                     e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList())
+        {
+            var contact = entry.Entity switch
+            {
+                Member m => (m.AccountId, m.Account, m.FullName, m.Phone),
+                Coach c => (c.AccountId, c.Account, c.FullName, c.Phone),
+                Receptionist r => (r.AccountId, r.Account, r.FullName, r.Phone),
+                CenterManager cm => (cm.AccountId, cm.Account, cm.FullName, cm.Phone),
+                _ => (Guid.Empty, (Account?)null, string.Empty, string.Empty)
+            };
+            if (contact.Item1 == Guid.Empty && contact.Item2 == null) continue;
+            var account = contact.Item2 ?? await Accounts.FindAsync(
+                new object[] { contact.Item1 }, cancellationToken);
+            if (account == null) continue;
+            account.FullName = contact.Item3;
+            account.Phone = contact.Item4;
+        }
     }
 
     private void StampAuditFields()
@@ -112,6 +137,10 @@ public class AppDbContext: DbContext
                 .HasColumnName("username")
                 .HasMaxLength(100)
                 .IsRequired();
+
+            // FIX: giữ thông tin cá nhân dù hồ sơ Coach/Lễ tân/Manager đã bị xóa.
+            builder.Property(x => x.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
+            builder.Property(x => x.Phone).HasColumnName("phone").HasMaxLength(20).IsRequired();
 
             builder.Property(x => x.Email)
                 .HasColumnName("email")

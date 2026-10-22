@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Receptionist;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Controllers;
 
@@ -70,8 +71,17 @@ public class ReceptionistController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateReceptionistRequest request)
     {
-        var receptionist = await _receptionistService.CreateAsync(request);
-        return CreatedAtAction(nameof(GetById), new { id = receptionist.Id }, receptionist);
+        // CODE CŨ: gọi CreateAsync và trả CreatedAtAction trực tiếp, không bắt lỗi nghiệp vụ.
+        // FIX 2026-10-22: thống nhất 400 JSON { message } cho luồng tạo hồ sơ.
+        try
+        {
+            var receptionist = await _receptionistService.CreateAsync(request);
+            return CreatedAtAction(nameof(GetById), new { id = receptionist.Id }, receptionist);
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     // PUT: api/receptionists/{id}

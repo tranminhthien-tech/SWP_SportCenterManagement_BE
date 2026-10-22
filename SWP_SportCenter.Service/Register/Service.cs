@@ -175,9 +175,25 @@ public class Service: IService
     public async Task<Response.RegisterResponse> RegisterAsync(
         Request.RegisterRequest request)
     {
+        var username = request.Username.Trim();
+        var email = request.Email.Trim();
+        var fullName = request.FullName.Trim();
+
+        if (string.IsNullOrWhiteSpace(username))
+            throw new ArgumentException("Username không được để trống");
+
+        if (string.IsNullOrWhiteSpace(email))
+            throw new ArgumentException("Email không được để trống");
+
+        if (string.IsNullOrWhiteSpace(fullName))
+            throw new ArgumentException("FullName không được để trống");
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+            throw new ArgumentException("Mật khẩu không được để trống");
+
         // Kiểm tra username đã tồn tại chưa
         bool usernameExists = await _dbContext.Accounts
-            .AnyAsync(a => a.Username == request.Username);
+            .AnyAsync(a => a.Username == username);
     
         if (usernameExists)
         {
@@ -187,7 +203,7 @@ public class Service: IService
     
         // Kiểm tra email đã tồn tại chưa
         bool emailExists = await _dbContext.Accounts
-            .AnyAsync(a => a.Email == request.Email);
+            .AnyAsync(a => a.Email == email);
     
         if (emailExists)
         {
@@ -202,25 +218,47 @@ public class Service: IService
         // Tạo Account
         var account = new Account()
         {
-            Username = request.Username,
-            Email = request.Email,
+            Username = username,
+            Email = email,
             Password = hashedPassword,
             Role = AccountRole.Member,
             Status = AccountStatus.Active
         };
-    
+
+        // CODE CŨ: _dbContext.Accounts.Add(account);
+        // CODE CŨ: await _dbContext.SaveChangesAsync();
+        // Code cũ chỉ lưu Account nên Member đăng ký không có Member profile.
+
+        // FIX 2026-10-22: lưu Account và Member trong cùng SaveChangesAsync (một transaction EF Core).
         _dbContext.Accounts.Add(account);
-    
-        // TODO: Tạo Member profile sau khi xác nhận
-        // các thuộc tính bắt buộc trong entity Member.
-    
+
+        var member = new Repository.Entity.Member
+        {
+            // FIX: tạo Id trước để sinh số điện thoại placeholder duy nhất, tránh vi phạm unique index.
+            Id = Guid.NewGuid(),
+            Account = account,
+            FullName = fullName,
+            Dob = DateTime.UtcNow.Date,
+            Gender = string.Empty,
+            Phone = string.Empty,
+            Avatar = string.Empty,
+            TrainingGoal = string.Empty
+        };
+
+        member.Phone = $"pending-{member.Id:N}"[..20];
+
+        _dbContext.Members.Add(member);
         await _dbContext.SaveChangesAsync();
     
         return new Response.RegisterResponse
         {
             UserId = account.Id,
+            Username = account.Username,
             Email = account.Email,
-            Message = "Registration successful"
+            FullName = member.FullName,
+            Role = account.Role.ToString(),
+            // FIX: không gửi OTP hay email; đăng ký hoàn tất ngay sau khi dữ liệu được lưu.
+            Message = "Registration successful. You can log in now."
         };
     }
     

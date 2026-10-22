@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.Coach;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Controllers;
 
@@ -50,9 +51,18 @@ public class CoachController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateCoachRequest request)
     {
-        var result = await _service.CreateAsync(request);
-
-        return Ok(result);
+        // CODE CŨ: var result = await _service.CreateAsync(request);
+        // CODE CŨ: return Ok(result);
+        // FIX 2026-10-22: bắt riêng lỗi nghiệp vụ và trả { message } để FE hiển thị.
+        try
+        {
+            var result = await _service.CreateAsync(request);
+            return Ok(result);
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     // PUT: api/coaches/{id}

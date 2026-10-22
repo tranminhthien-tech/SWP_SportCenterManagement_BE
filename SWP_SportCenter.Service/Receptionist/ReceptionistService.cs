@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository;
 using SWP_SportCenter.Repository.Enum;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Service.Receptionist;
 
@@ -101,28 +102,46 @@ public class ReceptionistService : IReceptionistService
         Request.CreateReceptionistRequest request)
     {
         var account = await _context.Accounts
-            .FirstOrDefaultAsync(account => account.Id == request.AccountId);
+            // CODE CŨ: chỉ lọc AccountId.
+            // FIX: dropdown và API thống nhất chỉ dùng Account chưa xóa, đang Active.
+            .FirstOrDefaultAsync(account => account.Id == request.AccountId &&
+                !account.IsDeleted && account.Status == AccountStatus.Active);
 
         if (account == null)
         {
-            throw new InvalidOperationException("Tài khoản không tồn tại.");
+            // CODE CŨ: throw new InvalidOperationException("Tài khoản không tồn tại.");
+            // FIX: dùng lỗi nghiệp vụ để trả 400 JSON.
+            throw new BusinessException("Tài khoản không tồn tại hoặc không hoạt động.");
         }
 
         if (account.Role != AccountRole.Receptionist)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(...);
+            // FIX: lỗi sai role trả 400 JSON.
+            throw new BusinessException(
                 "Tài khoản này không có vai trò Lễ tân (Receptionist).");
         }
 
         if (await _context.Receptionists.AnyAsync(
                 receptionist => receptionist.AccountId == request.AccountId))
         {
-            throw new InvalidOperationException("Tài khoản này đã có hồ sơ lễ tân.");
+            // CODE CŨ: throw new InvalidOperationException("Tài khoản này đã có hồ sơ lễ tân.");
+            // FIX: lỗi tạo trùng hồ sơ trả 400 JSON.
+            throw new BusinessException("Tài khoản này đã có hồ sơ lễ tân.");
         }
 
         // Chỉ kiểm tra Phone ở Receptionist.
         // Email được quản lý ở Account.
-        await EnsureContactInformationIsAvailableAsync(request.Phone);
+        // CODE CŨ: await EnsureContactInformationIsAvailableAsync(request.Phone);
+        // FIX: kiểm tra phone trong luồng Create bằng BusinessException.
+        if (await _context.Receptionists.AnyAsync(r => r.Phone == request.Phone.Trim()))
+            throw new BusinessException("Số điện thoại này đã được sử dụng.");
+
+        // FIX 2026-10-22: email hồ sơ lấy từ Account; kiểm tra và lưu email do form gửi.
+        var email = request.Email.Trim();
+        if (await _context.Accounts.AnyAsync(a => a.Email == email && a.Id != account.Id))
+            throw new BusinessException("Email này đã được sử dụng.");
+        account.Email = email;
 
         var receptionist = new Repository.Entity.Receptionist
         {
@@ -136,7 +155,9 @@ public class ReceptionistService : IReceptionistService
         };
 
         _context.Receptionists.Add(receptionist);
-        await _context.SaveChangesAsync();
+        // CODE CŨ: await _context.SaveChangesAsync();
+        // FIX: xử lý trùng hồ sơ/phone khi có request đồng thời.
+        await _context.SaveProfileChangesAsync();
 
         return MapToResponse(receptionist);
     }

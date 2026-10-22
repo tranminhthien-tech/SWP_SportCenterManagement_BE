@@ -9,7 +9,8 @@ public interface IAccountService
         AccountRole? role,
         AccountStatus? status,
         int pageSize,
-        int pageIndex);
+        int pageIndex,
+        bool? hasProfile = null); // FIX: lọc Account đã/chưa có hồ sơ theo role.
 
     Task<Response.AccountResponse?> GetByIdAsync(Guid id);
     Task<bool> UpdateAsync(Guid id, Request.UpdateAccountRequest request);

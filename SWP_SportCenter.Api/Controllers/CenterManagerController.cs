@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Service.CenterManager;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Controllers;
 
@@ -74,13 +75,17 @@ public class CenterManagerController : ControllerBase
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateCenterManagerRequest request)
     {
-        var result = await _centerManagerService.CreateAsync(request);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = result.Id },
-            result
-        );
+        // CODE CŨ: gọi CreateAsync và trả CreatedAtAction trực tiếp.
+        // FIX 2026-10-22: lỗi nghiệp vụ trả 400 JSON cho FE.
+        try
+        {
+            var result = await _centerManagerService.CreateAsync(request);
+            return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        }
+        catch (BusinessException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     // PUT: api/center-managers/{id}

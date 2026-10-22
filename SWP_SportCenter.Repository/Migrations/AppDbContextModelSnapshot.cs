@@ -45,6 +45,19 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    // FIX 2026-10-22: snapshot cho thông tin cá nhân độc lập của Account.
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("full_name");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
+
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasMaxLength(255)

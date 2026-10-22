@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using SWP_SportCenter.Repository.Enum;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Service.CenterManager;
 
@@ -52,35 +53,51 @@ public class CenterManagerService : ICenterManagerService
     {
         // Kiểm tra ràng buộc
         var account = await _context.Accounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.Id == request.AccountId);
+            // CODE CŨ: .AsNoTracking().FirstOrDefaultAsync(a => a.Id == request.AccountId);
+            // FIX: track Account để lưu email và gắn vào profile; chỉ dùng Account Active chưa xóa.
+            .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted && a.Status == AccountStatus.Active);
 
         if (account == null)
-            throw new Exception(
+            // CODE CŨ: throw new Exception(...);
+            // FIX: lỗi nghiệp vụ trả 400 JSON.
+            throw new BusinessException(
                 "Tài khoản (Account) không tồn tại.");
 
         if (account.Role != AccountRole.CenterManager)
-            throw new Exception(
+            // CODE CŨ: throw new Exception(...);
+            // FIX: lỗi sai role trả 400 JSON.
+            throw new BusinessException(
                 "Tài khoản này không có vai trò Quản lý trung tâm (Center Manager).");
 
         var isProfileExist = await _context.CenterManagers.AnyAsync(cm => cm.AccountId == request.AccountId);
-        if (isProfileExist) throw new Exception("Tài khoản này đã có hồ sơ Quản lý trung tâm.");
+        // CODE CŨ: if (isProfileExist) throw new Exception("Tài khoản này đã có hồ sơ Quản lý trung tâm.");
+        // FIX: phân biệt lỗi tạo trùng hồ sơ.
+        if (isProfileExist) throw new BusinessException("Tài khoản này đã có hồ sơ Quản lý trung tâm.");
 
         var isPhoneExist = await _context.CenterManagers.AnyAsync(cm => cm.Phone == request.Phone);
-        if (isPhoneExist) throw new Exception("Số điện thoại này đã được sử dụng.");
+        // CODE CŨ: if (isPhoneExist) throw new Exception("Số điện thoại này đã được sử dụng.");
+        // FIX: lỗi trùng phone trả 400 JSON.
+        if (isPhoneExist) throw new BusinessException("Số điện thoại này đã được sử dụng.");
 
-        var isEmailExist = await _context.CenterManagers.AnyAsync(cm => cm.Account.Email == request.Email);
-        if (isEmailExist) throw new Exception("Email này đã được sử dụng.");
+        // CODE CŨ: kiểm tra email qua CenterManagers và throw new Exception.
+        // FIX: email unique trên toàn bảng Account, loại trừ chính tài khoản được chọn.
+        var isEmailExist = await _context.Accounts.AnyAsync(a => a.Email == request.Email && a.Id != request.AccountId);
+        if (isEmailExist) throw new BusinessException("Email này đã được sử dụng.");
+        account.Email = request.Email;
 
         var newManager = new Repository.Entity.CenterManager
         {
             AccountId = request.AccountId,
             FullName = request.FullName,
             Phone = request.Phone,
+            // FIX: gắn Account để response lấy được Email ngay sau khi lưu.
+            Account = account,
         };
 
         _context.CenterManagers.Add(newManager);
-        await _context.SaveChangesAsync();
+        // CODE CŨ: await _context.SaveChangesAsync();
+        // FIX: xử lý lỗi unique constraint thành lỗi nghiệp vụ.
+        await _context.SaveProfileChangesAsync();
 
         return MapToResponse(newManager);
     }
