@@ -17,6 +17,9 @@ public class Response
         public string CoachName { get; set; } = string.Empty; 
 
         public int MaxCapacity { get; set; }
+        // FIX B14: công khai số đã đăng ký và chỗ còn lại.
+        public int CurrentEnrolled { get; set; }
+        public int SpotsLeft { get; set; }
         public DateTime StartDate { get; set; } // Trả về DateTime
         public DateTime EndDate { get; set; }   // Trả về DateTime
         public ClassStatus Status { get; set; }

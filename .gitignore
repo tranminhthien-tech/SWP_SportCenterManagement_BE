@@ -5,3 +5,8 @@ obj/
 *.user
 *.suo
 *.log
+# FIX B12: không commit biến môi trường hoặc credential cá nhân.
+.env
+.env.*
+!.env.example
+appsettings.Local.json

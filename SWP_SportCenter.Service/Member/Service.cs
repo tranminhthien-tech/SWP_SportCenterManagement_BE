@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository;
 using SWP_SportCenter.Repository.Enum;
@@ -34,7 +35,9 @@ public class Service: IService
 
              query = query.Where(x =>
                  x.FullName.Contains(searchTerm) ||
-                 x.Phone.Contains(searchTerm) ||
+                 // CODE CŨ: x.Phone.Contains(searchTerm)
+                 // FIX B18: profile cũ cho phép Phone null.
+                 (x.Phone != null && x.Phone.Contains(searchTerm)) ||
                  x.Account.Email.Contains(searchTerm));
          }
 
@@ -92,17 +95,25 @@ public class Service: IService
     public async Task<Response.MemberResponse> CreateAsync(
         Request.MemberRequest request)
     {
+        // FIX B17: bảo vệ cả lời gọi Service trực tiếp.
+        System.ComponentModel.DataAnnotations.Validator.ValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), true);
         var account = await _dbContext.Accounts
             .FirstOrDefaultAsync(a => a.Id == request.AccountId && !a.IsDeleted);
 
         if (account == null)
         {
-            throw new Exception("Tài khoản không tồn tại.");
+            // CODE CŨ: throw new Exception("Tài khoản không tồn tại.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tài khoản không tồn tại.");
         }
 
         if (account.Role != AccountRole.Member)
         {
-            throw new Exception(
+            // CODE CŨ: throw new Exception(
+            //                 "Tài khoản này không có vai trò Member.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Tài khoản này không có vai trò Member.");
         }
 
@@ -111,7 +122,10 @@ public class Service: IService
 
         if (isMemberExist)
         {
-            throw new Exception(
+            // CODE CŨ: throw new Exception(
+            //                 "Tài khoản này đã có hồ sơ Member.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Tài khoản này đã có hồ sơ Member.");
         }
 
@@ -120,7 +134,10 @@ public class Service: IService
 
         if (isPhoneExist)
         {
-            throw new Exception(
+            // CODE CŨ: throw new Exception(
+            //                 "Số điện thoại này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Số điện thoại này đã được sử dụng.");
         }
 
@@ -130,7 +147,9 @@ public class Service: IService
             AccountId = request.AccountId,
             FullName = request.FullName.Trim(),
             Dob = request.Dob,
-            Gender = request.Gender,
+            // CODE CŨ: Gender = request.Gender,
+            // FIX B17: chuẩn hóa trường tùy chọn, không ghi null vào cột bắt buộc.
+            Gender = request.Gender ?? string.Empty,
             Phone = request.Phone.Trim(),
             Avatar = request.Avatar ?? string.Empty,
             TrainingGoal = request.TrainingGoal ?? string.Empty,
@@ -161,6 +180,9 @@ public class Service: IService
         Guid id,
         Request.MemberRequest request)
     {
+        // FIX B17: validate trước mọi Trim và ghi database.
+        System.ComponentModel.DataAnnotations.Validator.ValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), true);
         var member = await _dbContext.Members
             .Include(x => x.Account)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted);
@@ -179,7 +201,10 @@ public class Service: IService
 
         if (isPhoneExist)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Số điện thoại này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Số điện thoại này đã được sử dụng.");
         }
 
@@ -191,13 +216,18 @@ public class Service: IService
 
         if (isEmailExist)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Email này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Email này đã được sử dụng.");
         }
 
         member.FullName = request.FullName.Trim();
         member.Dob = request.Dob;
-        member.Gender = request.Gender;
+        // CODE CŨ: member.Gender = request.Gender;
+        // FIX B17: Gender là tùy chọn ở form.
+        member.Gender = request.Gender ?? string.Empty;
         member.Phone = request.Phone.Trim();
         member.Avatar = request.Avatar ?? string.Empty;
         member.TrainingGoal = request.TrainingGoal ?? string.Empty;
@@ -235,7 +265,9 @@ public class Service: IService
     {
         var userIdClaim = _httpContext.HttpContext?
             .User
-            .FindFirst("UserId")?.Value;
+            // CODE CŨ: .FindFirst("UserId")?.Value;
+            // FIX B2: JWT thực tế dùng ClaimTypes.NameIdentifier.
+            .FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (!Guid.TryParse(userIdClaim, out var accountId))
         {
@@ -301,9 +333,14 @@ public class Service: IService
     public async Task<bool> UpdateMyProfileAsync(
         Request.MemberRequest request)
     {
+        // FIX B17: không để thiếu phone/email/dob trở thành lỗi runtime.
+        System.ComponentModel.DataAnnotations.Validator.ValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), true);
         var userIdClaim = _httpContext.HttpContext?
             .User
-            .FindFirst("UserId")?.Value;
+            // CODE CŨ: .FindFirst("UserId")?.Value;
+            // FIX B2: cập nhật profile theo subject có trong token.
+            .FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (!Guid.TryParse(userIdClaim, out var accountId))
         {
@@ -330,7 +367,10 @@ public class Service: IService
 
         if (isPhoneExist)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Số điện thoại này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Số điện thoại này đã được sử dụng.");
         }
 
@@ -342,13 +382,18 @@ public class Service: IService
 
         if (isEmailExist)
         {
-            throw new InvalidOperationException(
+            // CODE CŨ: throw new InvalidOperationException(
+            //                 "Email này đã được sử dụng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException(
                 "Email này đã được sử dụng.");
         }
 
         member.FullName = request.FullName.Trim();
         member.Dob = request.Dob;
-        member.Gender = request.Gender;
+        // CODE CŨ: member.Gender = request.Gender;
+        // FIX B17: không đưa null xuống cột bắt buộc.
+        member.Gender = request.Gender ?? string.Empty;
         member.Phone = request.Phone.Trim();
         member.Avatar = request.Avatar ?? string.Empty;
         member.TrainingGoal = request.TrainingGoal ?? string.Empty;

@@ -30,14 +30,19 @@ Env.Load();
 var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
 Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
 var builder = WebApplication.CreateBuilder(args);
+// FIX B12: fail fast nếu chưa cấu hình kết nối qua env/user-secrets.
+if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")))
+    throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured through environment variables or user-secrets.");
 
-Console.WriteLine("========================================");
-Console.WriteLine("DEMO PASSWORD HASH:");
-Console.WriteLine(Argon2Hasher.HashPassword("123456"));
-Console.WriteLine("========================================");
+// CODE CŨ: log hash mật khẩu demo khi khởi động.
+// FIX B12: không xuất thông tin xác thực ra log.
 
-builder.Services.AddControllers();
+// CODE CŨ: builder.Services.AddControllers();
+// FIX B19: áp dụng giới hạn phân trang cho mọi action có pageSize/pageIndex.
+builder.Services.AddControllers(o => o.Filters.Add<SWP_SportCenter.Filters.PaginationFilter>());
 builder.Services.AddHttpContextAccessor();
+// FIX B4 B5 B7 B15: dùng chung cách lấy Account/Member từ token.
+builder.Services.AddScoped<SWP_SportCenter.Service.Security.CurrentActor>();
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerServices();
@@ -93,6 +98,17 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// FIX B1: opt-in rõ ràng tại Render; áp dụng migration trước khi nhận request.
+// Không tự chạy ở local hoặc khi biến Database__ApplyMigrations chưa bật.
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
+{
+    using var migrationScope = app.Services.CreateScope();
+    await migrationScope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
+
+// FIX B6: đặt trước middleware khác để lỗi runtime trả ProblemDetails JSON.
+app.UseMiddleware<SWP_SportCenter.Middleware.ApiExceptionMiddleware>();
 
 app.UseSwaggerAPI();
 app.UseCors("FrontEnd"); 

@@ -87,6 +87,8 @@ public class InvoiceController : ControllerBase
 // Lấy danh sách hóa đơn của Member đang đăng nhập
     [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpGet("members/me")]
+    // FIX B11: giữ alias cũ để FE cũ chạy, thêm route chuẩn.
+    [HttpGet("~/api/members/me/invoices")]
     public async Task<IActionResult> GetMyInvoices()
     {
         var result = await _service.GetMyInvoicesAsync();
@@ -98,6 +100,8 @@ public class InvoiceController : ControllerBase
 // Lấy thông tin hóa đơn để xem / xuất hóa đơn
     [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpGet("invoices/{id:guid}/export")]
+    // FIX B11: route export đúng tiền tố, giữ route cũ tương thích.
+    [HttpGet("{id:guid}/export")]
     public async Task<IActionResult> ExportInvoice(Guid id)
     {
         var result = await _service.ExportAsync(id);

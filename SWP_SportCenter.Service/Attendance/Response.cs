@@ -10,6 +10,9 @@ public class Response
         public Guid Id { get; set; }
         
         public Guid SessionId { get; set; }
+        // FIX B5: FE hiển thị lịch sử theo lớp mà không gọi thêm request.
+        public Guid ClassId { get; set; }
+        public string ClassName { get; set; } = string.Empty;
         public DateTime SessionDate { get; set; }
         public TimeSpan SessionStartTime { get; set; }
         

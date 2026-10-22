@@ -33,6 +33,9 @@ public class ClassService : IClassService
                 CoachId = c.CoachId,
                 CoachName = c.Coach != null ? c.Coach.FullName : string.Empty,
                 MaxCapacity = c.MaxCapacity,
+                // FIX B14: không tính booking hủy/xóa mềm.
+                CurrentEnrolled = c.ClassBookings.Count(b => !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled),
+                SpotsLeft = Math.Max(0, c.MaxCapacity - c.ClassBookings.Count(b => !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled)),
                 StartDate = c.StartDate,
                 EndDate = c.EndDate,
                 Status = c.Status,
@@ -52,6 +55,10 @@ public class ClassService : IClassService
 
         if (classEntity == null) return null;
 
+        // FIX B14: tính trực tiếp database, không phụ thuộc navigation đã load.
+        var enrolled = await _context.ClassBookings.CountAsync(b => b.ClassId == id &&
+            !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled);
+
         return new Response.ClassResponse
         {
             Id = classEntity.Id,
@@ -61,6 +68,8 @@ public class ClassService : IClassService
             CoachId = classEntity.CoachId,
             CoachName = classEntity.Coach != null ? classEntity.Coach.FullName : string.Empty,
             MaxCapacity = classEntity.MaxCapacity,
+            CurrentEnrolled = enrolled,
+            SpotsLeft = Math.Max(0, classEntity.MaxCapacity - enrolled),
             StartDate = classEntity.StartDate,
             EndDate = classEntity.EndDate,
             Status = classEntity.Status,
@@ -74,7 +83,9 @@ public class ClassService : IClassService
         // Validate xem StartDate có trước EndDate không
         if (request.StartDate >= request.EndDate)
         {
-            throw new Exception("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
+            // CODE CŨ: throw new Exception("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
         }
 
         var newClass = new Class
@@ -95,14 +106,18 @@ public class ClassService : IClassService
         await _context.SaveChangesAsync();
 
         // Query lại để lấy được thông tin CategoryName và CoachName
-        return await GetByIdAsync(newClass.Id) ?? throw new Exception("Lỗi khi tạo lớp học.");
+        // CODE CŨ: return await GetByIdAsync(newClass.Id) ?? throw new Exception("Lỗi khi tạo lớp học.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        return await GetByIdAsync(newClass.Id) ?? throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lỗi khi tạo lớp học.");
     }
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateClassRequest request)
     {
         if (request.StartDate >= request.EndDate)
         {
-            throw new Exception("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
+            // CODE CŨ: throw new Exception("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Ngày kết thúc phải lớn hơn ngày bắt đầu.");
         }
 
         var classEntity = await _context.Classes.FindAsync(id);
@@ -139,7 +154,9 @@ public class ClassService : IClassService
 
         if (hasSessions || hasBookings)
         {
-            throw new Exception("Không thể xóa lớp học này vì đã có lịch học được xếp hoặc đã có học viên đăng ký.");
+            // CODE CŨ: throw new Exception("Không thể xóa lớp học này vì đã có lịch học được xếp hoặc đã có học viên đăng ký.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa lớp học này vì đã có lịch học được xếp hoặc đã có học viên đăng ký.");
         }
 
         _context.Classes.Remove(classEntity);
@@ -159,7 +176,9 @@ public class ClassService : IClassService
             {
                 MemberId = cb.MemberId,
                 FullName = cb.Member.FullName,
-                Phone = cb.Member.Phone,
+                // CODE CŨ: Phone = cb.Member.Phone,
+                // FIX B18: response cũ vẫn là string.
+                Phone = cb.Member.Phone ?? string.Empty,
                 Email = cb.Member.Account.Email,
                 BookingStatus = cb.Status,
                 BookingDate = cb.BookingDate
@@ -173,13 +192,17 @@ public class ClassService : IClassService
         if (!await _context.SportCategories
                 .AnyAsync(c => c.Id == categoryId))
         {
-            throw new Exception("Bộ môn không tồn tại.");
+            // CODE CŨ: throw new Exception("Bộ môn không tồn tại.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Bộ môn không tồn tại.");
         }
 
         if (!await _context.Coaches
                 .AnyAsync(c => c.Id == coachId))
         {
-            throw new Exception("Huấn luyện viên không tồn tại.");
+            // CODE CŨ: throw new Exception("Huấn luyện viên không tồn tại.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Huấn luyện viên không tồn tại.");
         }
     }
 }

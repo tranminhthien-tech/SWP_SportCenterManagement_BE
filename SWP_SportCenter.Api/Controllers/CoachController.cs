@@ -22,17 +22,23 @@ public class CoachController : ControllerBase
 
     // GET: api/coaches
     // Lấy danh sách tất cả Coach
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: chỉ ManagerOrReceptionistPolicy.
+    // FIX B9: khách được xem danh sách Coach, không lộ email/phone.
+    [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var result = await _service.GetAllAsync();
-        return Ok(result);
+        if (User.IsInRole("CenterManager") || User.IsInRole("Receptionist")) return Ok(result);
+        // FIX B9: response công khai chỉ chứa thông tin chuyên môn.
+        return Ok(result.Select(c => new { c.Id, c.FullName, c.Avatar, c.Specialization, c.ExperienceYears }));
     }
 
     // GET: api/coaches/{id}
     // Lấy thông tin Coach theo ID
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: chỉ ManagerOrReceptionistPolicy.
+    // FIX B9: chi tiết Coach công khai.
+    [AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
@@ -41,7 +47,9 @@ public class CoachController : ControllerBase
         if (result == null)
             return NotFound("Không tìm thấy huấn luyện viên.");
 
-        return Ok(result);
+        if (User.IsInRole("CenterManager") || User.IsInRole("Receptionist")) return Ok(result);
+        // FIX B9: ẩn thông tin liên hệ và AccountId ở response công khai.
+        return Ok(new { result.Id, result.FullName, result.Avatar, result.Specialization, result.ExperienceYears });
     }
 
     // POST: api/coaches

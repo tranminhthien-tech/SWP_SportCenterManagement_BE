@@ -59,7 +59,9 @@ public class RoomService : IRoomService
         var isExist = await _context.Rooms.AnyAsync(r => r.RoomName.ToLower() == request.RoomName.ToLower());
         if (isExist)
         {
-            throw new Exception("Tên phòng tập này đã tồn tại trong hệ thống.");
+            // CODE CŨ: throw new Exception("Tên phòng tập này đã tồn tại trong hệ thống.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tên phòng tập này đã tồn tại trong hệ thống.");
         }
 
         var newRoom = new Repository.Entity.Room
@@ -92,7 +94,9 @@ public class RoomService : IRoomService
         if (room.RoomName != request.RoomName)
         {
             var isExist = await _context.Rooms.AnyAsync(r => r.RoomName.ToLower() == request.RoomName.ToLower());
-            if (isExist) throw new Exception("Tên phòng tập này đã tồn tại trong hệ thống.");
+            // CODE CŨ: if (isExist) throw new Exception("Tên phòng tập này đã tồn tại trong hệ thống.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            if (isExist) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tên phòng tập này đã tồn tại trong hệ thống.");
         }
 
         room.RoomName = request.RoomName;
@@ -115,7 +119,9 @@ public class RoomService : IRoomService
         var hasSessions = await _context.ClassSessions.AnyAsync(s => s.RoomId == id);
         if (hasSessions)
         {
-            throw new Exception("Không thể xóa phòng này vì đã có lịch buổi học được xếp trong phòng.");
+            // CODE CŨ: throw new Exception("Không thể xóa phòng này vì đã có lịch buổi học được xếp trong phòng.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa phòng này vì đã có lịch buổi học được xếp trong phòng.");
         }
 
         _context.Rooms.Remove(room);

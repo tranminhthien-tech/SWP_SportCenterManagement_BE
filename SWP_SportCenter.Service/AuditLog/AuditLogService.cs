@@ -76,7 +76,9 @@ public class AuditLogService : IAuditLogService
     public async Task<Response.AuditLogResponse> LogAsync(Request.CreateAuditLogRequest request)
     {
         var isAccountExist = await _context.Accounts.AnyAsync(a => a.Id == request.AccountId);
-        if (!isAccountExist) throw new Exception("Tài khoản (Account) không tồn tại.");
+        // CODE CŨ: if (!isAccountExist) throw new Exception("Tài khoản (Account) không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (!isAccountExist) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tài khoản (Account) không tồn tại.");
 
         var newLog = new Repository.Entity.AuditLog
         {

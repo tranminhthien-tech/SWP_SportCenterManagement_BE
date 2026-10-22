@@ -2,6 +2,9 @@ namespace SWP_SportCenter.Service.TrainingResult;
 
 public interface IService
 {
+    // FIX B13: Coach liệt kê tất cả kết quả của chính mình, có bộ lọc.
+    Task<Base.Response.PageResult<Response.TrainingResultResponse>> GetCoachResultsAsync(
+        Guid? memberId, Guid? planId, int pageSize, int pageIndex);
     // GET: /api/training-results/{id}
     // Lấy chi tiết kết quả tập luyện
     public Task<Response.TrainingResultResponse?>

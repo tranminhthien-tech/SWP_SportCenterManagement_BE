@@ -10,6 +10,8 @@ public class Request
 
         public Guid CoachId { get; set; }
 
+        // FIX B13: validate điểm 0..10 trước khi vào Service.
+        [System.ComponentModel.DataAnnotations.Range(0, 10)]
         public float PerformanceScore { get; set; }
 
         public string CoachComment { get; set; } = string.Empty;

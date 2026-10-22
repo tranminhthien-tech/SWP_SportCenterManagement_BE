@@ -9,6 +9,16 @@ namespace SWP_SportCenter.Controllers;
 [Route("api")]
 public class MembershipController : ControllerBase
 {
+    // FIX B20: bổ sung API sửa/xóa mềm membership.
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    [HttpPut("memberships/{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] Request.UpdateMembershipRequest request)
+        => await _service.UpdateAsync(id, request) ? NoContent() : NotFound(new { message = "Membership not found" });
+
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    [HttpDelete("memberships/{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+        => await _service.DeleteAsync(id) ? NoContent() : NotFound(new { message = "Membership not found" });
     private readonly IService _service;
 
     public MembershipController(IService membershipService)
@@ -25,8 +35,12 @@ public class MembershipController : ControllerBase
         [FromQuery] SWP_SportCenter.Repository.Enum.MembershipStatus? status,
         [FromQuery] Guid? memberId,
         [FromQuery] Guid? packageId,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetAllAsync(
             searchTerm,
@@ -44,8 +58,12 @@ public class MembershipController : ControllerBase
     [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpGet("members/me/memberships")]
     public async Task<IActionResult> GetMyMemberships(
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetMyMembershipsAsync(
             pageSize,
@@ -60,8 +78,12 @@ public class MembershipController : ControllerBase
     [HttpGet("members/{memberId:guid}/memberships")]
     public async Task<IActionResult> GetByMemberId(
         [FromRoute] Guid memberId,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetByMemberIdAsync(
             memberId,
@@ -122,9 +144,12 @@ public class MembershipController : ControllerBase
     [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost("memberships/{id:guid}/renew")]
     public async Task<IActionResult> Renew(
-        [FromRoute] Guid id)
+        [FromRoute] Guid id,
+        [FromQuery] Guid? receptionistId = null)
     {
-        var result = await _service.RenewAsync(id);
+        // CODE CŨ: _service.RenewAsync(id);
+        // FIX B20: lập hóa đơn mới cho kỳ gia hạn, không sửa kỳ cũ.
+        var result = await _service.RenewAsync(id, receptionistId);
 
         if (result == null)
         {

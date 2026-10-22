@@ -38,8 +38,12 @@ public class TrainingPlanController : ControllerBase
     [HttpGet("coaches/me/training-plans")]
     public async Task<IActionResult> GetMyTrainingPlansAsCoach(
         [FromQuery] string? searchTerm,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetMyTrainingPlansAsCoachAsync(
             searchTerm,
@@ -55,8 +59,12 @@ public class TrainingPlanController : ControllerBase
     [HttpGet("members/me/training-plans")]
     public async Task<IActionResult> GetMyTrainingPlansAsMember(
         [FromQuery] string? searchTerm,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetMyTrainingPlansAsMemberAsync(
             searchTerm,

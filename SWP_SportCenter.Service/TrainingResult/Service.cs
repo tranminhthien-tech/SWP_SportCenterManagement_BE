@@ -7,6 +7,27 @@ namespace SWP_SportCenter.Service.TrainingResult;
 
 public class Service:IService
 {
+    // FIX B13: chỉ query kết quả do Coach đang đăng nhập sở hữu.
+    public async Task<Base.Response.PageResult<Response.TrainingResultResponse>> GetCoachResultsAsync(
+        Guid? memberId, Guid? planId, int pageSize, int pageIndex)
+    {
+        if (pageSize is < 1 or > 500 || pageIndex < 1) throw new ArgumentException("Phân trang không hợp lệ.");
+        var coachId = await GetCurrentCoachIdAsync();
+        var query = _dbContext.TrainingResults.AsNoTracking().Where(x => x.CoachId == coachId && !x.IsDeleted);
+        if (memberId.HasValue) query = query.Where(x => x.MemberId == memberId.Value);
+        if (planId.HasValue) query = query.Where(x => x.PlanId == planId.Value);
+        var total = await query.CountAsync();
+        var data = await query.OrderByDescending(x => x.EvaluationDate).ThenByDescending(x => x.Id)
+            .Skip((pageIndex - 1) * pageSize).Take(pageSize)
+            .Select(x => new Response.TrainingResultResponse {
+                TrainingResultId = x.Id, PlanId = x.PlanId, PlanTitle = x.Plan.Title,
+                MemberId = x.MemberId, MemberName = x.Member.FullName,
+                CoachId = x.CoachId, CoachName = x.Coach.FullName,
+                PerformanceScore = x.PerformanceScore, CoachComment = x.CoachComment,
+                EvaluationDate = x.EvaluationDate, CreatedAt = x.CreatedAt, UpdatedAt = x.UpdatedAt
+            }).ToListAsync();
+        return new() { Data = data, TotalItems = total, PageSize = pageSize, PageIndex = pageIndex };
+    }
     private readonly AppDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
 
@@ -77,6 +98,10 @@ public class Service:IService
         {
             TrainingResultId = trainingResult.Id,
             PlanId = trainingResult.PlanId,
+            // FIX B13: trả tên cùng kết quả.
+            MemberName = trainingResult.Member.FullName,
+            CoachName = trainingResult.Coach.FullName,
+            PlanTitle = trainingResult.Plan.Title,
             MemberId = trainingResult.MemberId,
             CoachId = trainingResult.CoachId,
             PerformanceScore = trainingResult.PerformanceScore,
@@ -98,6 +123,10 @@ public class Service:IService
             {
                 TrainingResultId = x.Id,
                 PlanId = x.PlanId,
+                // FIX B13: trả tên cùng kết quả.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                PlanTitle = x.Plan.Title,
                 MemberId = x.MemberId,
                 CoachId = x.CoachId,
                 PerformanceScore = x.PerformanceScore,
@@ -151,6 +180,10 @@ public class Service:IService
             {
                 TrainingResultId = x.Id,
                 PlanId = x.PlanId,
+                // FIX B13: trả tên cùng kết quả.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                PlanTitle = x.Plan.Title,
                 MemberId = x.MemberId,
                 CoachId = x.CoachId,
                 PerformanceScore = x.PerformanceScore,
@@ -224,6 +257,10 @@ public class Service:IService
             {
                 TrainingResultId = x.Id,
                 PlanId = x.PlanId,
+                // FIX B13: trả tên cùng kết quả.
+                MemberName = x.Member.FullName,
+                CoachName = x.Coach.FullName,
+                PlanTitle = x.Plan.Title,
                 MemberId = x.MemberId,
                 CoachId = x.CoachId,
                 PerformanceScore = x.PerformanceScore,
@@ -297,7 +334,9 @@ public class Service:IService
 
         await _dbContext.SaveChangesAsync();
 
-        return MapToResponse(trainingResult);
+        // CODE CŨ: return MapToResponse(trainingResult);
+        // FIX B13: projection tải đủ tên của kết quả vừa tạo.
+        return (await GetByIdAsync(trainingResult.Id))!;
     }
 
     // PUT: /api/training-results/{id}

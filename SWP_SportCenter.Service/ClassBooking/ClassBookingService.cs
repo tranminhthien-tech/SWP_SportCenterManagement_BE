@@ -11,14 +11,20 @@ namespace SWP_SportCenter.Service.ClassBooking;
 public class ClassBookingService : IClassBookingService
 {
     private readonly AppDbContext _context;
+    private readonly SWP_SportCenter.Service.Security.CurrentActor _actor;
 
-    public ClassBookingService(AppDbContext context)
+    // CODE CŨ: constructor chỉ nhận DbContext.
+    // FIX B7: lấy MemberId từ danh tính đã xác thực.
+    public ClassBookingService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor)
     {
         _context = context;
+        _actor = actor;
     }
 
     public async Task<IEnumerable<Response.BookingResponse>> GetMemberBookingsAsync(Guid memberId)
     {
+        // FIX B4 B7: Member được đọc chính mình; staff đọc theo quyền controller.
+        await _actor.EnsureCanViewMemberAsync(memberId);
         return await _context.ClassBookings
             .AsNoTracking()
             .Include(cb => cb.Class)
@@ -41,32 +47,50 @@ public class ClassBookingService : IClassBookingService
 
     public async Task<Response.BookingResponse> BookClassAsync(Request.CreateBookingRequest request)
     {
+        // FIX B7 B8: Member bỏ qua ID giả mạo; staff được chỉ định MemberId.
+        if (_actor.IsMember) request.MemberId = await _actor.MemberIdAsync();
         // 1. Kiểm tra Lớp học có tồn tại và còn mở không
-        var classEntity = await _context.Classes.FirstOrDefaultAsync(c => c.Id == request.ClassId);
+        // CODE CŨ: tìm theo ClassId mà không loại bản ghi xóa mềm.
+        // FIX B7: chỉ đặt lớp còn tồn tại.
+        var classEntity = await _context.Classes.FirstOrDefaultAsync(c => c.Id == request.ClassId && !c.IsDeleted);
         if (classEntity == null) 
-            throw new Exception("Lớp học không tồn tại.");
+            // CODE CŨ: throw new Exception("Lớp học không tồn tại.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp học không tồn tại.");
             
         if (classEntity.Status == ClassStatus.Completed || classEntity.Status == ClassStatus.Cancelled)
-            throw new Exception("Lớp học này đã kết thúc hoặc bị hủy, không thể đăng ký.");
+            // CODE CŨ: throw new Exception("Lớp học này đã kết thúc hoặc bị hủy, không thể đăng ký.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp học này đã kết thúc hoặc bị hủy, không thể đăng ký.");
 
         // 2. Kiểm tra xem Học viên đã đăng ký lớp này chưa (chống Duplicate Booking)
         var isAlreadyBooked = await _context.ClassBookings
-            .AnyAsync(cb => cb.MemberId == request.MemberId && cb.ClassId == request.ClassId);
+            // CODE CŨ: chỉ đối chiếu MemberId/ClassId.
+            // FIX B14: booking hủy/xóa mềm không chiếm chỗ.
+            .AnyAsync(cb => cb.MemberId == request.MemberId && cb.ClassId == request.ClassId && !cb.IsDeleted && cb.Status != BookingStatus.Cancelled);
             
         if (isAlreadyBooked) 
-            throw new Exception("Bạn đã đăng ký tham gia lớp học này rồi.");
+            // CODE CŨ: throw new Exception("Bạn đã đăng ký tham gia lớp học này rồi.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Bạn đã đăng ký tham gia lớp học này rồi.");
 
         // 3. Kiểm tra số lượng học viên tối đa (Capacity Check)
         var currentBookingsCount = await _context.ClassBookings
-            .CountAsync(cb => cb.ClassId == request.ClassId);
+            // CODE CŨ: CountAsync(cb => cb.ClassId == request.ClassId).
+            // FIX B14: khớp cách tính CurrentEnrolled công khai.
+            .CountAsync(cb => cb.ClassId == request.ClassId && !cb.IsDeleted && cb.Status != BookingStatus.Cancelled);
             
         if (currentBookingsCount >= classEntity.MaxCapacity)
-            throw new Exception("Lớp học đã đạt số lượng học viên tối đa.");
+            // CODE CŨ: throw new Exception("Lớp học đã đạt số lượng học viên tối đa.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp học đã đạt số lượng học viên tối đa.");
         
         if (!await _context.Members
-                .AnyAsync(m => m.Id == request.MemberId))
+                .AnyAsync(m => m.Id == request.MemberId && !m.IsDeleted && !m.Account.IsDeleted && m.Account.Status == AccountStatus.Active))
         {
-            throw new Exception("Học viên không tồn tại.");
+            // CODE CŨ: throw new Exception("Học viên không tồn tại.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Học viên không tồn tại.");
         }
 
         // 4. Tiến hành lưu đăng ký
@@ -102,6 +126,8 @@ public class ClassBookingService : IClassBookingService
 
     public async Task<bool> CancelBookingAsync(Guid bookingId, Guid memberId)
     {
+        // FIX B7: chỉ tìm booking thuộc Member hiện tại, dù URL chứa ID khác.
+        if (_actor.IsMember) memberId = await _actor.MemberIdAsync();
         // Yêu cầu phải khớp cả bookingId và memberId để tránh việc user này xóa nhầm/cố tình xóa booking của user khác
         var booking = await _context.ClassBookings.FirstOrDefaultAsync(b => b.Id == bookingId && b.MemberId == memberId);
         
@@ -109,7 +135,9 @@ public class ClassBookingService : IClassBookingService
 
         // Tránh xóa nếu học viên đã điểm danh/tham gia lớp này (ràng buộc dữ liệu thực tế)
         if (booking.Status == BookingStatus.Attended)
-            throw new Exception("Không thể hủy đăng ký vì bạn đã được xác nhận tham gia lớp học này.");
+            // CODE CŨ: throw new Exception("Không thể hủy đăng ký vì bạn đã được xác nhận tham gia lớp học này.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể hủy đăng ký vì bạn đã được xác nhận tham gia lớp học này.");
 
         // Thực hiện xóa cứng (DELETE) khỏi database
         _context.ClassBookings.Remove(booking);

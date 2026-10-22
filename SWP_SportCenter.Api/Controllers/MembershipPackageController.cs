@@ -18,12 +18,18 @@ public class MembershipPackageController : ControllerBase
 
     // GET: api/membership-packages
     // Lấy danh sách gói tập, có phân trang và tìm kiếm
-    [Authorize]
     [HttpGet]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? searchTerm,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetAllAsync(
             searchTerm,
@@ -35,8 +41,10 @@ public class MembershipPackageController : ControllerBase
 
     // GET: api/membership-packages/{id}
     // Lấy chi tiết gói tập
-    [Authorize]
     [HttpGet("{id:guid}")]
+    // CODE CŨ: [Authorize] trên GET danh mục.
+    // FIX B9: cho phép khách xem dữ liệu danh mục công khai.
+    [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id)
     {
         var result = await _service.GetByIdAsync(id);

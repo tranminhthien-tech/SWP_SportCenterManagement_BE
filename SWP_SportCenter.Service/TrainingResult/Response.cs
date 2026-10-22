@@ -7,6 +7,10 @@ public class Response
         public Guid TrainingResultId { get; set; }
 
         public Guid PlanId { get; set; }
+        // FIX B13: thông tin hiển thị đi kèm ID.
+        public string PlanTitle { get; set; } = string.Empty;
+        public string MemberName { get; set; } = string.Empty;
+        public string CoachName { get; set; } = string.Empty;
 
         public Guid MemberId { get; set; }
 

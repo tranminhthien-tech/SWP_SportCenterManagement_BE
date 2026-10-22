@@ -57,7 +57,9 @@ public class SportCategoryService : ISportCategoryService
         var isExist = await _context.SportCategories.AnyAsync(c => c.CategoryName.ToLower() == request.CategoryName.ToLower());
         if (isExist)
         {
-            throw new Exception("Tên bộ môn này đã tồn tại trong hệ thống.");
+            // CODE CŨ: throw new Exception("Tên bộ môn này đã tồn tại trong hệ thống.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tên bộ môn này đã tồn tại trong hệ thống.");
         }
 
         var newCategory = new Repository.Entity.SportCategory
@@ -88,7 +90,9 @@ public class SportCategoryService : ISportCategoryService
         if (category.CategoryName != request.CategoryName)
         {
             var isExist = await _context.SportCategories.AnyAsync(c => c.CategoryName.ToLower() == request.CategoryName.ToLower());
-            if (isExist) throw new Exception("Tên bộ môn này đã tồn tại trong hệ thống.");
+            // CODE CŨ: if (isExist) throw new Exception("Tên bộ môn này đã tồn tại trong hệ thống.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            if (isExist) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tên bộ môn này đã tồn tại trong hệ thống.");
         }
 
         category.CategoryName = request.CategoryName;
@@ -110,7 +114,9 @@ public class SportCategoryService : ISportCategoryService
         var hasClasses = await _context.Classes.AnyAsync(c => c.CategoryId == id);
         if (hasClasses)
         {
-            throw new Exception("Không thể xóa bộ môn này vì đang có lớp học thuộc bộ môn này.");
+            // CODE CŨ: throw new Exception("Không thể xóa bộ môn này vì đang có lớp học thuộc bộ môn này.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa bộ môn này vì đang có lớp học thuộc bộ môn này.");
         }
 
         _context.SportCategories.Remove(category);

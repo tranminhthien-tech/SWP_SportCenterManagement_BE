@@ -11,10 +11,14 @@ namespace SWP_SportCenter.Service.Attendance;
 public class AttendanceService : IAttendanceService
 {
     private readonly AppDbContext _context;
+    private readonly SWP_SportCenter.Service.Security.CurrentActor _actor;
 
-    public AttendanceService(AppDbContext context)
+    // CODE CŨ: constructor chỉ nhận DbContext.
+    // FIX B15: RecordedBy được lấy tại server.
+    public AttendanceService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor)
     {
         _context = context;
+        _actor = actor;
     }
 
     public async Task<IEnumerable<Response.AttendanceResponse>> GetBySessionIdAsync(Guid sessionId)
@@ -29,6 +33,9 @@ public class AttendanceService : IAttendanceService
             {
                 Id = a.Id,
                 SessionId = a.SessionId,
+                // FIX B5: dữ liệu lớp đi kèm điểm danh.
+                ClassId = a.Session.ClassId,
+                ClassName = a.Session.Class.ClassName,
                 SessionDate = a.Session != null
                     ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
                     : DateTime.MinValue,
@@ -44,6 +51,8 @@ public class AttendanceService : IAttendanceService
 
     public async Task<IEnumerable<Response.AttendanceResponse>> GetByMemberIdAsync(Guid memberId)
     {
+        // FIX B5: chặn Member xem lịch sử của người khác.
+        await _actor.EnsureCanViewMemberAsync(memberId);
         return await _context.Attendances
             .AsNoTracking()
             .Include(a => a.Session)
@@ -55,6 +64,9 @@ public class AttendanceService : IAttendanceService
             {
                 Id = a.Id,
                 SessionId = a.SessionId,
+                // FIX B5: dữ liệu lớp đi kèm điểm danh.
+                ClassId = a.Session.ClassId,
+                ClassName = a.Session.Class.ClassName,
                 SessionDate = a.Session != null
                     ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
                     : DateTime.MinValue,
@@ -75,25 +87,33 @@ public class AttendanceService : IAttendanceService
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId);
             
-        if (session == null) throw new Exception("Buổi học không tồn tại.");
+        // CODE CŨ: if (session == null) throw new Exception("Buổi học không tồn tại.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (session == null) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Buổi học không tồn tại.");
 
         // 2. Kiểm tra học viên có đăng ký tham gia lớp này không
         var isBooked = await _context.ClassBookings
             .AnyAsync(cb => cb.ClassId == session.ClassId && cb.MemberId == request.MemberId);
             
-        if (!isBooked) throw new Exception("Học viên này không có trong danh sách đăng ký của lớp học.");
+        // CODE CŨ: if (!isBooked) throw new Exception("Học viên này không có trong danh sách đăng ký của lớp học.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (!isBooked) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Học viên này không có trong danh sách đăng ký của lớp học.");
 
         // 3. Kiểm tra xem học viên này đã được điểm danh trong buổi này chưa
         var existingAttendance = await _context.Attendances
             .FirstOrDefaultAsync(a => a.SessionId == request.SessionId && a.MemberId == request.MemberId);
         
-        if (existingAttendance != null) throw new Exception("Học viên này đã được điểm danh trong buổi học này rồi.");
+        // CODE CŨ: if (existingAttendance != null) throw new Exception("Học viên này đã được điểm danh trong buổi học này rồi.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (existingAttendance != null) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Học viên này đã được điểm danh trong buổi học này rồi.");
 
         var newAttendance = new Repository.Entity.Attendance
         {
             SessionId = request.SessionId,
             MemberId = request.MemberId,
-            RecordedBy = request.RecordedBy,
+            // CODE CŨ: RecordedBy = request.RecordedBy,
+            // FIX B15: bỏ qua người ghi do client truyền.
+            RecordedBy = _actor.AccountId,
             CheckInTime = DateTimeOffset.UtcNow,
             Status = request.Status
         };
@@ -105,13 +125,18 @@ public class AttendanceService : IAttendanceService
 
         var savedAttendance = await _context.Attendances
             .Include(a => a.Member)
-            .Include(a => a.Session)
+            // CODE CŨ: .Include(a => a.Session)
+            // FIX B5: mapping ClassName sau khi ghi cần tải cả lớp của session.
+            .Include(a => a.Session).ThenInclude(s => s.Class)
             .FirstAsync(a => a.Id == newAttendance.Id);
 
         return new Response.AttendanceResponse
         {
             Id = savedAttendance.Id,
             SessionId = savedAttendance.SessionId,
+            // FIX B5: dữ liệu lớp đi kèm điểm danh.
+            ClassId = savedAttendance.Session.ClassId,
+            ClassName = savedAttendance.Session.Class.ClassName,
             SessionDate = savedAttendance.Session.Date.ToDateTime(TimeOnly.MinValue),
             SessionStartTime = savedAttendance.Session.StartTime,
             MemberId = savedAttendance.MemberId,
@@ -128,7 +153,9 @@ public class AttendanceService : IAttendanceService
         if (attendance == null) return false;
 
         attendance.Status = request.Status;
-        attendance.RecordedBy = request.RecordedBy; // Cập nhật lại người thao tác sửa
+        // CODE CŨ: attendance.RecordedBy = request.RecordedBy;
+        // FIX B15: ghi danh tính người thực hiện cập nhật.
+        attendance.RecordedBy = _actor.AccountId;
         
         _context.Attendances.Update(attendance);
         await _context.SaveChangesAsync();

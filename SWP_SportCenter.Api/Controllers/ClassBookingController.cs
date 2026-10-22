@@ -18,7 +18,9 @@ public class ClassBookingController : ControllerBase
 
     // GET: api/class-bookings/member/{memberId}
     // Lấy danh sách lớp học mà Member đã đăng ký
-    [Authorize(Policy = JwtExtensions.StaffPolicy)]
+    // CODE CŨ: [Authorize(Policy = JwtExtensions.StaffPolicy)]
+    // FIX B4: Member xem chính mình, Service kiểm tra ownership.
+    [Authorize(Roles = "Member,Coach,Receptionist,CenterManager")]
     [HttpGet("member/{memberId:guid}")]
     public async Task<IActionResult> GetMemberBookings(Guid memberId)
     {
@@ -29,7 +31,9 @@ public class ClassBookingController : ControllerBase
 
     // POST: api/class-bookings
     // Đăng ký tham gia lớp học
-    [Authorize(Policy = JwtExtensions.MemberPolicy)]
+    // CODE CŨ: chỉ MemberPolicy.
+    // FIX B8: Lễ tân/Manager được đặt hộ học viên.
+    [Authorize(Roles = "Member,Receptionist,CenterManager")]
     [HttpPost]
     public async Task<IActionResult> BookClass(
         [FromBody] Request.CreateBookingRequest request)
@@ -41,7 +45,9 @@ public class ClassBookingController : ControllerBase
 
     // DELETE: api/class-bookings/{bookingId}/member/{memberId}
     // Hủy đăng ký lớp học
-    [Authorize(Policy = JwtExtensions.MemberPolicy)]
+    // CODE CŨ: chỉ MemberPolicy.
+    // FIX B8: Lễ tân/Manager được hủy hộ học viên.
+    [Authorize(Roles = "Member,Receptionist,CenterManager")]
     [HttpDelete("{bookingId:guid}/member/{memberId:guid}")]
     public async Task<IActionResult> CancelBooking(
         Guid bookingId,

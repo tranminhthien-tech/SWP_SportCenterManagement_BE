@@ -149,7 +149,9 @@ public class CoachService : ICoachService
                 c.Phone == request.Phone &&
                 c.Id != id))
         {
-            throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+            // CODE CŨ: throw new Exception("Số điện thoại này đã được sử dụng bởi người khác.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Số điện thoại này đã được sử dụng bởi người khác.");
         }
 
         // Kiểm tra Email trùng với Account khác
@@ -158,7 +160,9 @@ public class CoachService : ICoachService
                 a.Email == request.Email &&
                 a.Id != coach.AccountId))
         {
-            throw new Exception("Email này đã được sử dụng bởi người khác.");
+            // CODE CŨ: throw new Exception("Email này đã được sử dụng bởi người khác.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Email này đã được sử dụng bởi người khác.");
         }
 
         // Cập nhật thông tin Coach
@@ -182,14 +186,19 @@ public class CoachService : ICoachService
         if (coach == null) return false;
 
         var hasClasses = await _context.Classes.AnyAsync(c => c.CoachId == id);
-        if (hasClasses) throw new Exception("Không thể xóa Huấn luyện viên này vì họ đang phụ trách các lớp học.");
+        // CODE CŨ: if (hasClasses) throw new Exception("Không thể xóa Huấn luyện viên này vì họ đang phụ trách các lớp học.");
+        // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        if (hasClasses) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa Huấn luyện viên này vì họ đang phụ trách các lớp học.");
         var hasTrainingData =
             await _context.TrainingPlans.AnyAsync(p => p.CoachId == id)
             || await _context.TrainingResults.AnyAsync(r => r.CoachId == id);
 
         if (hasTrainingData)
         {
-            throw new Exception(
+            // CODE CŨ: throw new Exception(
+            //                 "Không thể xóa Huấn luyện viên này vì đã có kế hoạch/kết quả tập luyện.");
+            // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Không thể xóa Huấn luyện viên này vì đã có kế hoạch/kết quả tập luyện.");
         }
         _context.Coaches.Remove(coach);
@@ -236,7 +245,7 @@ public class CoachService : ICoachService
                     : string.Empty,
 
                 Phone = cb.Member != null
-                    ? cb.Member.Phone
+                    ? cb.Member.Phone ?? string.Empty // FIX B18: giữ response string khi phone chưa có.
                     : string.Empty,
 
                 // Email lấy từ Account

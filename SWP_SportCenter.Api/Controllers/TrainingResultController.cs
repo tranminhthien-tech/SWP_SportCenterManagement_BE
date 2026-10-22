@@ -9,6 +9,14 @@ namespace SWP_SportCenter.Controllers;
 [Route("api")]
 public class TrainingResultController : ControllerBase
 {
+    // FIX B13: không cần gọi N request theo từng học viên.
+    [Authorize(Policy = JwtExtensions.CoachPolicy)]
+    [HttpGet("coaches/me/training-results")]
+    public async Task<IActionResult> GetCoachResults([FromQuery] Guid? memberId, [FromQuery] Guid? planId,
+        // CODE CŨ: [FromQuery] int pageSize = 10, [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10, [FromQuery] int pageIndex = 1)
+        => Ok(await _service.GetCoachResultsAsync(memberId, planId, pageSize, pageIndex));
     private readonly IService _service;
 
     public TrainingResultController(IService service)
@@ -38,8 +46,12 @@ public class TrainingResultController : ControllerBase
     [HttpGet("members/me/training-results")]
     public async Task<IActionResult> GetMyTrainingResults(
         [FromQuery] string? searchTerm,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetMyTrainingResultsAsync(
             searchTerm,
@@ -56,8 +68,12 @@ public class TrainingResultController : ControllerBase
     public async Task<IActionResult> GetByMemberId(
         Guid memberId,
         [FromQuery] string? searchTerm,
-        [FromQuery] int pageSize = 10,
-        [FromQuery] int pageIndex = 1)
+        // CODE CŨ: [FromQuery] int pageSize = 10,
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 500)] int pageSize = 10,
+        // CODE CŨ: [FromQuery] int pageIndex = 1)
+        // FIX B19: Swagger công bố giới hạn và MVC validate trước query.
+        [FromQuery, System.ComponentModel.DataAnnotations.Range(1, 2147483647)] int pageIndex = 1)
     {
         var result = await _service.GetByMemberIdAsync(
             memberId,

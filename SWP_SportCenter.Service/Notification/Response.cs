@@ -4,6 +4,8 @@ public class Response
 {
     public class NotificationResponse
     {
+        // FIX B16: endpoint gửi thông báo trả số người nhận thực tế.
+        public int? SentCount { get; set; }
         public Guid Id { get; set; }
         public Guid AccountId { get; set; }
         public string Title { get; set; } = string.Empty;
