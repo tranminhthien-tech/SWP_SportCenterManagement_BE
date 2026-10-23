@@ -373,6 +373,28 @@ using (var scope = app.Services.CreateScope()) {
     Check(await notifier.RunAsync() == 0, "B32 excludes expired distant and cancelled memberships");
 }
 // B33: thao tác của cả ba staff tự ghi log, POST không thể giả AccountId.
+// FIX B35: log Added ghi đúng ID thật của bản ghi, không dùng ID tạm; ghi nhận giá trị cũ -> mới (changes).
+Login(manager);
+var createRoomResp = await http.PostAsJsonAsync("/api/rooms", new { roomName = "AuditRoomB35", capacity = 15, status = 1 });
+Check(createRoomResp.IsSuccessStatusCode, "B35 create room succeeds");
+var createdRoomId = (await Json(createRoomResp)).GetProperty("id").GetGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var roomAddLog = await db.AuditLogs.OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync(x => x.ActionType == "Added:Room" && x.Description.Contains(createdRoomId.ToString()));
+    Check(roomAddLog != null && roomAddLog.Description.Contains("AuditRoomB35") && roomAddLog.Description.Contains("\"changes\""), "B35 Added:Room audit log matches real entityId and initial values");
+}
+var updateRoomResp = await http.PutAsJsonAsync($"/api/rooms/{createdRoomId}", new { roomName = "AuditRoomB35_Renamed", capacity = 20, status = 1 });
+Check(updateRoomResp.IsSuccessStatusCode, "B35 update room succeeds");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var roomModLog = await db.AuditLogs.OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync(x => x.ActionType == "Modified:Room" && x.Description.Contains(createdRoomId.ToString()));
+    Check(roomModLog != null && roomModLog.Description.Contains("AuditRoomB35") && roomModLog.Description.Contains("AuditRoomB35_Renamed"), "B35 Modified:Room audit log tracks old and new values");
+    // Kiểm tra không lộ trường nhạy cảm trong bất kỳ audit log nào.
+    var sensitiveLogs = await db.AuditLogs.Where(x => x.Description.Contains("\"Password\"") || x.Description.Contains("\"Token\"")).ToListAsync();
+    Check(sensitiveLogs.Count == 0, "B35 sensitive fields excluded from audit logs");
+}
 var auditPage = await Json(await http.GetAsync("/api/audit-logs?pageSize=500"));
 Check(auditPage.GetProperty("data").GetArrayLength() > 0 && auditPage.GetProperty("totalItems").GetInt32() > 0, "B33 automatic audit and paginated response");
 using (var scope = app.Services.CreateScope()) {

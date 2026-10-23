@@ -18,6 +18,14 @@ public class AppDbContext: DbContext
     {
         // FIX: đồng bộ thông tin cá nhân trước khi lưu/tháo hồ sơ, cùng transaction SaveChanges.
         await PreserveAccountContactAsync(cancellationToken);
+        // FIX B35: đảm bảo mọi entity Added có Guid thật trước khi lưu.
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>().Where(e => e.State == EntityState.Added))
+        {
+            if (entry.Entity.Id == Guid.Empty)
+            {
+                entry.Entity.Id = Guid.NewGuid();
+            }
+        }
         // FIX B17: chuẩn hóa DateTime trước khi ghi timestamptz PostgreSQL.
         foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified))
             foreach (var property in entry.Properties.Where(p => p.CurrentValue is DateTime))
