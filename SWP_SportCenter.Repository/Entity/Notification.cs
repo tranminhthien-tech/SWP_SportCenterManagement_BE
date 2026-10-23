@@ -4,6 +4,8 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class Notification: BaseEntity, IAuditableEntity
 {
+    // FIX B32: null cho thông báo thường; giữ khóa nhắc hạn ngay cả khi xóa mềm.
+    public string? DeduplicationKey { get; set; }
     
 
     public string Title { get; set; } = string.Empty;

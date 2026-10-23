@@ -10,10 +10,14 @@ namespace SWP_SportCenter.Service.AuditLog;
 public class AuditLogService : IAuditLogService
 {
     private readonly AppDbContext _context;
+    private readonly Security.CurrentActor _actor;
 
-    public AuditLogService(AppDbContext context)
+    // CODE CŨ: AuditLogService(AppDbContext context).
+    // FIX B33: token là nguồn duy nhất của danh tính người ghi.
+    public AuditLogService(AppDbContext context, Security.CurrentActor actor)
     {
         _context = context;
+        _actor = actor;
     }
 
     public async Task<IEnumerable<Response.AuditLogResponse>> GetAllAsync()
@@ -75,16 +79,20 @@ public class AuditLogService : IAuditLogService
 
     public async Task<Response.AuditLogResponse> LogAsync(Request.CreateAuditLogRequest request)
     {
-        var isAccountExist = await _context.Accounts.AnyAsync(a => a.Id == request.AccountId);
+        var accountId = _actor.AccountId; // FIX B33
+        // CODE CŨ: kiểm tra và lưu request.AccountId do FE cung cấp.
+        var isAccountExist = await _context.Accounts.AnyAsync(a => a.Id == accountId && !a.IsDeleted);
         // CODE CŨ: if (!isAccountExist) throw new Exception("Tài khoản (Account) không tồn tại.");
         // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
         if (!isAccountExist) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Tài khoản (Account) không tồn tại.");
 
         var newLog = new Repository.Entity.AuditLog
         {
-            AccountId = request.AccountId,
+            // CODE CŨ: AccountId = request.AccountId,
+            // FIX B33: log thủ công được đánh dấu client, không giả làm audit tự động.
+            AccountId = accountId,
             ActionType = request.ActionType,
-            Description = request.Description,
+            Description = "[client] " + request.Description,
             Timestamp = DateTimeOffset.UtcNow
         };
 
@@ -92,7 +100,8 @@ public class AuditLogService : IAuditLogService
         await _context.SaveChangesAsync();
 
         // Query lại Account để lấy Username trả về cho DTO
-        var account = await _context.Accounts.FindAsync(request.AccountId);
+        // CODE CŨ: FindAsync(request.AccountId).
+        var account = await _context.Accounts.FindAsync(accountId); // FIX B33
 
         return new Response.AuditLogResponse
         {
@@ -103,5 +112,29 @@ public class AuditLogService : IAuditLogService
             Description = newLog.Description,
             Timestamp = newLog.Timestamp
         };
+    }
+
+    // FIX B33: phân trang và lọc tại DB, khoảng thời gian tính theo Timestamp.
+    public async Task<Base.Response.PageResult<Response.AuditLogResponse>> SearchAsync(
+        int pageIndex, int pageSize, DateTimeOffset? from, DateTimeOffset? to, Guid? accountId, string? actionType)
+    {
+        if (pageIndex < 1 || pageSize < 1 || pageSize > 500 || (long)(pageIndex - 1) * pageSize > int.MaxValue)
+            throw new ArgumentException("Phân trang không hợp lệ.");
+        if (from > to) throw new ArgumentException("Thời gian bắt đầu phải trước thời gian kết thúc.");
+        // FIX B33: PostgreSQL timestamptz yêu cầu DateTimeOffset UTC.
+        from = from?.ToUniversalTime();
+        to = to?.ToUniversalTime();
+        var query = _context.AuditLogs.AsNoTracking().AsQueryable();
+        if (from.HasValue) query = query.Where(x => x.Timestamp >= from.Value);
+        if (to.HasValue) query = query.Where(x => x.Timestamp <= to.Value);
+        if (accountId.HasValue) query = query.Where(x => x.AccountId == accountId.Value);
+        if (!string.IsNullOrWhiteSpace(actionType)) query = query.Where(x => x.ActionType == actionType);
+        var total = await query.CountAsync();
+        var data = await query.OrderByDescending(x => x.Timestamp).ThenBy(x => x.Id)
+            .Skip((pageIndex - 1) * pageSize).Take(pageSize).Select(x => new Response.AuditLogResponse {
+                Id = x.Id, AccountId = x.AccountId, Username = x.Account.Username,
+                ActionType = x.ActionType, Description = x.Description, Timestamp = x.Timestamp
+            }).ToListAsync();
+        return new() { Data = data, TotalItems = total, PageIndex = pageIndex, PageSize = pageSize };
     }
 }

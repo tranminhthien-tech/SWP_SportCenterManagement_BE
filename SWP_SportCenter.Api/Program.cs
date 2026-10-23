@@ -48,10 +48,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerServices();
 builder.Services.AddJwtServices(builder.Configuration);
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+// CODE CŨ: AddDbContext<AppDbContext>(options => options.UseNpgsql(...));
+// FIX B33: đăng ký interceptor ở server, không phụ thuộc FE gửi audit.
+builder.Services.AddScoped<SWP_SportCenter.Infrastructure.ServerAuditInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((services, options) =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")
-    )
+    ).AddInterceptors(services.GetRequiredService<SWP_SportCenter.Infrastructure.ServerAuditInterceptor>())
 );
 
 builder.Services.AddScoped<MemberService.IService, MemberService.Service>();
@@ -73,6 +76,11 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IReceptionistService, ReceptionistService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+// FIX B31 B32: API hỗ trợ và job nhắc hạn chạy tại BE.
+builder.Services.AddScoped<SWP_SportCenter.Service.Support.SupportRequestService>();
+builder.Services.AddScoped<MembershipExpiryNotifier>();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddHostedService<SWP_SportCenter.Infrastructure.MembershipExpiryWorker>();
 builder.Services.AddScoped<RegisterService.IService, RegisterService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 

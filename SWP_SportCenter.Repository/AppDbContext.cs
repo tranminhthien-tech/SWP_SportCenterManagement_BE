@@ -121,9 +121,23 @@ public class AppDbContext: DbContext
     public DbSet<AuditLog> AuditLogs { get; set; }
 
     public DbSet<Room> Rooms { get; set; }
+    // FIX B31: lưu yêu cầu hỗ trợ của thành viên.
+    public DbSet<SupportRequest> SupportRequests { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        // FIX B31: khóa ngoại Restrict bảo toàn lịch sử; index phục vụ lọc theo member/trạng thái.
+        modelBuilder.Entity<SupportRequest>(b => {
+            b.ToTable("support_request");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Content).HasMaxLength(2000).IsRequired();
+            b.Property(x => x.Resolution).HasMaxLength(2000);
+            b.Property(x => x.Status).HasConversion<int>();
+            b.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.HandledByAccount).WithMany().HasForeignKey(x => x.HandledByAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.MemberId, x.CreatedAt });
+            b.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
 
 
         // =========================================================
@@ -196,6 +210,9 @@ public class AppDbContext: DbContext
         modelBuilder.Entity<Notification>(builder =>
         {
             builder.ToTable("notification");
+            // FIX B32: khóa sự kiện duy nhất chống gửi nhắc hạn trùng kể cả nhiều instance.
+            builder.Property(x => x.DeduplicationKey).HasMaxLength(200);
+            builder.HasIndex(x => x.DeduplicationKey).IsUnique();
 
             builder.HasKey(x => x.Id);
 

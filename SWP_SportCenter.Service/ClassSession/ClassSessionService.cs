@@ -110,6 +110,15 @@ public class ClassSessionService : IClassSessionService
 
         await ValidateSessionLogicAsync(request.ClassId, request.RoomId, DateOnly.FromDateTime(request.Date), request.StartTime, request.EndTime, id);
 
+        // CODE CŨ: cập nhật lịch mà không tạo thông báo.
+        // FIX B32: chỉ thông báo khi lịch/phòng/lớp thực sự đổi, bao gồm học viên lớp cũ và mới.
+        var changed = session.ClassId != request.ClassId || session.RoomId != request.RoomId ||
+            session.Date != DateOnly.FromDateTime(request.Date) || session.StartTime != request.StartTime || session.EndTime != request.EndTime;
+        if (changed)
+            await QueueSessionNotificationsAsync(new[] { session.ClassId, request.ClassId },
+                "Lịch học đã thay đổi",
+                $"Buổi học {session.Date:dd/MM/yyyy} {session.StartTime:hh\\:mm} được chuyển sang {request.Date:dd/MM/yyyy} {request.StartTime:hh\\:mm} đến {request.EndTime:hh\\:mm}. Vui lòng kiểm tra lại lớp và phòng trên lịch học.");
+
         session.ClassId = request.ClassId;
         session.RoomId = request.RoomId;
         session.Date = DateOnly.FromDateTime(request.Date);
@@ -136,6 +145,9 @@ public class ClassSessionService : IClassSessionService
                 throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa buổi học này vì đã có dữ liệu điểm danh.");
             }
 
+            // FIX B32: notification và xóa lịch nằm trong cùng SaveChanges/transaction.
+            await QueueSessionNotificationsAsync(new[] { session.ClassId }, "Buổi học đã bị hủy",
+                $"Buổi học ngày {session.Date:dd/MM/yyyy} từ {session.StartTime:hh\\:mm} đến {session.EndTime:hh\\:mm} đã bị hủy. Vui lòng kiểm tra lịch học.");
             _context.ClassSessions.Remove(session);
             await _context.SaveChangesAsync();
 
@@ -225,6 +237,18 @@ public class ClassSessionService : IClassSessionService
     //             $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");
     //     }
     // }
+    // FIX B32: thông báo trong ứng dụng, không gửi email; loại booking hủy và hồ sơ không hoạt động.
+    private async Task QueueSessionNotificationsAsync(Guid[] classIds, string title, string message)
+    {
+        var ids = await _context.ClassBookings.Where(b => classIds.Contains(b.ClassId) && !b.IsDeleted &&
+                b.Status != BookingStatus.Cancelled && !b.Member.IsDeleted && !b.Member.Account.IsDeleted &&
+                b.Member.Account.Status == AccountStatus.Active)
+            .Select(b => b.Member.AccountId).Distinct().ToListAsync();
+        _context.Notifications.AddRange(ids.Select(id => new Repository.Entity.Notification {
+            Id = Guid.NewGuid(), AccountId = id, Title = title, Message = message
+        }));
+    }
+
     private async Task ValidateSessionLogicAsync(
     Guid classId,
     Guid roomId,

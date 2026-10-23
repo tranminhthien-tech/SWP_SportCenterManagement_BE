@@ -22,7 +22,7 @@ namespace SWP_SportCenter.Repository.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -42,27 +42,26 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                         .HasColumnType("character varying(255)")
                         .HasColumnName("email");
 
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    // FIX 2026-10-22: snapshot cho thông tin cá nhân độc lập của Account.
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
                         .HasColumnName("full_name");
 
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("phone");
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Password")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("password");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
 
                     b.Property<int>("Role")
                         .HasColumnType("integer")
@@ -102,11 +101,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("11111111-1111-1111-1111-111111111111"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "member@demo.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "",
+                            Phone = "",
                             Role = 1,
                             Status = 1,
                             Username = "demo_member"
@@ -116,11 +114,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("22222222-2222-2222-2222-222222222222"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "coach@demo.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 2,
                             Status = 1,
                             Username = "demo_coach"
@@ -130,11 +127,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("33333333-3333-3333-3333-333333333333"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "receptionist@demo.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 3,
                             Status = 1,
                             Username = "demo_receptionist"
@@ -144,11 +140,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("44444444-4444-4444-4444-444444444444"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 2, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "manager@demo.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 4,
                             Status = 1,
                             Username = "demo_manager"
@@ -158,11 +153,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("55555555-5555-5555-5555-555555555555"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "yoga@sportcenter.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 2,
                             Status = 1,
                             Username = "tran.thanh.binh"
@@ -172,11 +166,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("66666666-6666-6666-6666-666666666666"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "fitness@sportcenter.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 2,
                             Status = 1,
                             Username = "nguyen.manh.hung"
@@ -186,11 +179,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                             Id = new Guid("77777777-7777-7777-7777-777777777777"),
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 10, 5, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             Email = "swim@sportcenter.com",
-                            // FIX B12 B18: giá trị seed không chứa thông tin cá nhân giả.
                             FullName = "",
-                            Phone = "",
                             IsDeleted = false,
                             Password = "XjPY2ddfUWTRs09lvSDvww==:lBsRcZuZNY/eGQr07s1mig==",
+                            Phone = "",
                             Role = 2,
                             Status = 1,
                             Username = "le.hoang.yen"
@@ -639,7 +631,7 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
                     b.ToTable("invoice", (string)null);
                 });
 
-modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -660,8 +652,6 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    // CODE CŨ: b.Property<DateTime>("Dob")
-                    // FIX B18: nullable birthday.
                     b.Property<DateTime?>("Dob")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("dob");
@@ -682,7 +672,6 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                         .HasColumnType("boolean");
 
                     b.Property<string>("Phone")
-                        // FIX B18: Phone nullable, unique index keeps real values unique.
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("phone");
@@ -823,6 +812,10 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("DeduplicationKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -849,6 +842,9 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("DeduplicationKey")
+                        .IsUnique();
 
                     b.HasIndex("IsRead");
 
@@ -980,6 +976,50 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                         .IsUnique();
 
                     b.ToTable("sport_category", (string)null);
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SupportRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("HandledByAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Resolution")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HandledByAccountId");
+
+                    b.HasIndex("MemberId", "CreatedAt");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("support_request", (string)null);
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.TrainingPlan", b =>
@@ -1268,6 +1308,24 @@ modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SupportRequest", b =>
+                {
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Account", "HandledByAccount")
+                        .WithMany()
+                        .HasForeignKey("HandledByAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HandledByAccount");
+
+                    b.Navigation("Member");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.TrainingPlan", b =>

@@ -247,6 +247,10 @@ public class CoachService : ICoachService
             .ThenBy(cb => cb.Member!.FullName)
             .Select(cb => new Response.CoachMemberResponse
             {
+                // FIX B30: projection lấy từ hồ sơ Member, giữ nullable DOB cũ.
+                TrainingGoal = cb.Member.TrainingGoal,
+                Gender = cb.Member.Gender,
+                Dob = cb.Member.Dob,
                 MemberId = cb.MemberId,
                 FullName = cb.Member != null
                     ? cb.Member.FullName

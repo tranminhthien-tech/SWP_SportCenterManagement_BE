@@ -67,7 +67,9 @@ public class MemberController: ControllerBase
 
     // PUT /api/members/{id}
     // Cập nhật Member
-    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // CODE CŨ: [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // FIX B24: lễ tân được sửa hồ sơ tại quầy, không mở quyền xóa.
+    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         [FromRoute] Guid id,

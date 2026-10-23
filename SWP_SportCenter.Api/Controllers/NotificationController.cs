@@ -57,7 +57,9 @@ public class NotificationController : ControllerBase
 
     // POST: api/notifications
     // Gửi thông báo (Manager)
-    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // CODE CŨ: [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // FIX B29: Coach gửi tới học viên của mình; Service kiểm tra toàn bộ người nhận.
+    [Authorize(Policy = JwtExtensions.ManagerOrCoachPolicy)]
     [HttpPost]
     public async Task<IActionResult> Send(
         [FromBody] Request.SendNotificationRequest request)

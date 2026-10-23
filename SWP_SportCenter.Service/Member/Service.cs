@@ -51,6 +51,9 @@ public class Service: IService
              {
                  MemberId = x.Id,
                  AccountId = x.AccountId,
+                 // FIX B24: đủ thông tin cho lễ tân mà không cần quyền Accounts.
+                 CreatedAt = x.Account.CreatedAt,
+                 AccountStatus = x.Account.Status,
                  FullName = x.FullName,
                  Dob = x.Dob,
                  Gender = x.Gender,
@@ -80,6 +83,9 @@ public class Service: IService
             {
                 MemberId = x.Id,
                 AccountId = x.AccountId,
+                // FIX B24: bổ sung metadata Account vào hồ sơ.
+                CreatedAt = x.Account.CreatedAt,
+                AccountStatus = x.Account.Status,
                 FullName = x.FullName,
                 Dob = x.Dob,
                 Gender = x.Gender,
@@ -117,10 +123,12 @@ public class Service: IService
                 "Tài khoản này không có vai trò Member.");
         }
 
-        var isMemberExist = await _dbContext.Members
-            .AnyAsync(m => m.AccountId == request.AccountId);
+        // CODE CŨ: AnyAsync(m => m.AccountId == request.AccountId) chặn cả hồ sơ đã xóa mềm.
+        // FIX B27: khôi phục đúng bản ghi cũ để giữ ID và lịch sử liên quan.
+        var existingMember = await _dbContext.Members
+            .FirstOrDefaultAsync(m => m.AccountId == request.AccountId);
 
-        if (isMemberExist)
+        if (existingMember != null && !existingMember.IsDeleted)
         {
             // CODE CŨ: throw new Exception(
             //                 "Tài khoản này đã có hồ sơ Member.");
@@ -130,7 +138,9 @@ public class Service: IService
         }
 
         var isPhoneExist = await _dbContext.Members
-            .AnyAsync(m => m.Phone == request.Phone);
+            // CODE CŨ: .AnyAsync(m => m.Phone == request.Phone);
+            // FIX B27: loại chính hồ sơ đang khôi phục, vẫn tôn trọng unique phone toàn bảng.
+            .AnyAsync(m => m.Phone == request.Phone.Trim() && m.AccountId != request.AccountId);
 
         if (isPhoneExist)
         {
@@ -139,6 +149,23 @@ public class Service: IService
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
             throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Số điện thoại này đã được sử dụng.");
+        }
+
+        // FIX B27: Email thuộc Account; kiểm tra trùng trước khi thay đổi bất kỳ dữ liệu nào.
+        if (await _dbContext.Accounts.AnyAsync(a => a.Id != account.Id && a.Email == request.Email.Trim()))
+            throw new Exceptions.ConflictException("Email này đã được sử dụng.");
+        account.Email = request.Email.Trim();
+        if (existingMember != null)
+        {
+            existingMember.IsDeleted = false;
+            existingMember.FullName = request.FullName.Trim();
+            existingMember.Dob = request.Dob;
+            existingMember.Gender = request.Gender ?? string.Empty;
+            existingMember.Phone = request.Phone.Trim();
+            existingMember.Avatar = request.Avatar ?? string.Empty;
+            existingMember.TrainingGoal = request.TrainingGoal ?? string.Empty;
+            await _dbContext.SaveChangesAsync();
+            return (await GetByIdAsync(existingMember.Id))!;
         }
 
         var member = new Repository.Entity.Member
@@ -165,6 +192,9 @@ public class Service: IService
         {
             MemberId = member.Id,
             AccountId = member.AccountId,
+            // FIX B24: CreatedAt là ngày tạo Account, không đổi khi khôi phục profile.
+            CreatedAt = account.CreatedAt,
+            AccountStatus = account.Status,
             FullName = member.FullName,
             Dob = member.Dob,
             Gender = member.Gender,
@@ -283,6 +313,9 @@ public class Service: IService
             {
                 MemberId = x.Id,
                 AccountId = x.AccountId,
+                // FIX B24: bổ sung metadata Account vào hồ sơ.
+                CreatedAt = x.Account.CreatedAt,
+                AccountStatus = x.Account.Status,
                 FullName = x.FullName,
                 Dob = x.Dob,
                 Gender = x.Gender,
@@ -417,6 +450,9 @@ public class Service: IService
             {
                 MemberId = x.Id,
                 AccountId = x.AccountId,
+                // FIX B24: bổ sung metadata Account vào hồ sơ.
+                CreatedAt = x.Account.CreatedAt,
+                AccountStatus = x.Account.Status,
                 FullName = x.FullName,
                 Dob = x.Dob,
                 Gender = x.Gender,

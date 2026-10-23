@@ -6,6 +6,9 @@ namespace SWP_SportCenter.Service.AuditLog;
 
 public interface IAuditLogService
 {
+    // FIX B33: endpoint danh sách có phân trang và bộ lọc.
+    Task<Base.Response.PageResult<Response.AuditLogResponse>> SearchAsync(int pageIndex, int pageSize,
+        DateTimeOffset? from, DateTimeOffset? to, Guid? accountId, string? actionType);
     // Lấy toàn bộ log của hệ thống (dành cho Admin)
     Task<IEnumerable<Response.AuditLogResponse>> GetAllAsync();
     
