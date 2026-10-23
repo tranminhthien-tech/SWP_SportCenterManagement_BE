@@ -91,7 +91,9 @@ public class ClassBookingService : IClassBookingService
         if (isAlreadyBooked) 
             // CODE CŨ: throw new Exception("Bạn đã đăng ký tham gia lớp học này rồi.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
-            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Bạn đã đăng ký tham gia lớp học này rồi.");
+            // CODE CŨ: throw new BusinessException("Bạn đã đăng ký tham gia lớp học này rồi.");
+            // FIX B34: thông báo trung tính cho cả đặt hộ; trùng booking trả 409 JSON.
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException("Học viên này đã đăng ký lớp học này rồi.");
 
         // 3. Kiểm tra số lượng học viên tối đa (Capacity Check)
         var currentBookingsCount = await _context.ClassBookings

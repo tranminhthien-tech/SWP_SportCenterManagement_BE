@@ -20,9 +20,12 @@ public class AuditLogController : ControllerBase
     // Lấy toàn bộ lịch sử hoạt động
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    // CODE CŨ: GetAll() gọi GetAllAsync() trả toàn bộ mảng.
+    // FIX B33: response PageResult, FE đọc data/totalItems/pageIndex/pageSize.
+    public async Task<IActionResult> GetAll(int pageIndex = 1, int pageSize = 20,
+        DateTimeOffset? from = null, DateTimeOffset? to = null, Guid? accountId = null, string? actionType = null)
     {
-        var result = await _auditLogService.GetAllAsync();
+        var result = await _auditLogService.SearchAsync(pageIndex, pageSize, from, to, accountId, actionType);
 
         return Ok(result);
     }
@@ -60,7 +63,9 @@ public class AuditLogController : ControllerBase
 
     // POST: api/audit-logs
     // Ghi log hoạt động mới
-    [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // CODE CŨ: [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
+    // FIX B33: Staff có thể ghi chú client; audit thực tế đã do server ghi tự động.
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpPost]
     public async Task<IActionResult> Log(
         [FromBody] Request.CreateAuditLogRequest request)

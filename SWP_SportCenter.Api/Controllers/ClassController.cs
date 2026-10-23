@@ -95,7 +95,9 @@ public class ClassController : ControllerBase
 
     // GET: api/classes/{classId}/members
     // Lấy danh sách học viên của lớp
-    [Authorize(Policy = JwtExtensions.ManagerOrCoachPolicy)]
+    // CODE CŨ: [Authorize(Policy = JwtExtensions.ManagerOrCoachPolicy)]
+    // FIX B28: Receptionist cần xem roster tại quầy, không mở quyền sửa lớp.
+    [Authorize(Policy = JwtExtensions.StaffPolicy)]
     [HttpGet("{classId:guid}/members")]
     public async Task<IActionResult> GetMembersByClassId(
         Guid classId)

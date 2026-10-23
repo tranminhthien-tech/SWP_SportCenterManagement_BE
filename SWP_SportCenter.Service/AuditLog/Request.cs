@@ -7,8 +7,8 @@ public class Request
 {
     public class CreateAuditLogRequest
     {
-        [Required(ErrorMessage = "Vui lòng cung cấp Account ID")]
-        public Guid AccountId { get; set; }
+        // CODE CŨ: [Required] public Guid AccountId { get; set; }
+        // FIX B33: bỏ AccountId khỏi DTO, danh tính người ghi lấy từ JWT.
 
         [Required(ErrorMessage = "Loại hành động không được để trống")]
         [MaxLength(100)]

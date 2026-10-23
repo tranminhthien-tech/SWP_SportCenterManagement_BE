@@ -490,6 +490,8 @@ public async Task<Response.AccountResponse> CreateAsync(
 
     switch (request.Role)
     {
+        // FIX B26 23/10: đã xác nhận GIỮ HAI BƯỚC. Staff chỉ có Account ở bước này;
+        // tạo hồ sơ qua /api/coaches, /api/receptionists hoặc /api/center-managers.
         case AccountRole.Member:
         {
             var member = new Repository.Entity.Member()

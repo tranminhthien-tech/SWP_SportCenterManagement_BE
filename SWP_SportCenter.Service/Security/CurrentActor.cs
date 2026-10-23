@@ -10,6 +10,11 @@ namespace SWP_SportCenter.Service.Security;
 public sealed class CurrentActor(AppDbContext db, IHttpContextAccessor http)
 {
     public bool IsMember => http.HttpContext?.User.IsInRole(nameof(AccountRole.Member)) == true;
+    // FIX 23/10: kiểm tra quyền nghiệp vụ cả trong Service.
+    public bool IsCoach => http.HttpContext?.User.IsInRole(nameof(AccountRole.Coach)) == true;
+    // FIX B31: phân biệt người xử lý yêu cầu hỗ trợ với Coach chỉ có quyền chuyên môn.
+    public bool CanHandleSupport => http.HttpContext?.User.IsInRole(nameof(AccountRole.Receptionist)) == true ||
+        http.HttpContext?.User.IsInRole(nameof(AccountRole.CenterManager)) == true;
     public Guid AccountId => Guid.TryParse(http.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id)
         ? id : throw new UnauthorizedAccessException("Không tìm thấy AccountId trong token.");
 

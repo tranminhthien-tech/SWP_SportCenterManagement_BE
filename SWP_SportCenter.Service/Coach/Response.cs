@@ -33,6 +33,10 @@ public class Response
     // DTO trả về cho API xem danh sách học viên của HLV
     public class CoachMemberResponse
     {
+        // FIX B30: thông tin cơ bản và mục tiêu tập luyện của học viên.
+        public string? TrainingGoal { get; set; }
+        public string? Gender { get; set; }
+        public DateTime? Dob { get; set; }
         public Guid MemberId { get; set; }
         public string FullName { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;

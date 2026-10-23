@@ -44,8 +44,9 @@ public class AttendanceController : ControllerBase
     // POST: api/attendances
     // Điểm danh học viên
     // CODE CŨ: CoachAndReceptionPolicy không có Manager.
-    // FIX B15: quyền ghi thống nhất với quyền xem.
-    [Authorize(Policy = "AttendanceViewPolicy")]
+    // CODE CŨ: [Authorize(Policy = "AttendanceViewPolicy")]
+    // FIX 23/10: chỉ Coach ghi điểm danh, Manager và Receptionist chỉ xem.
+    [Authorize(Policy = "CoachPolicy")]
     [HttpPost]
     public async Task<IActionResult> RecordAttendance(
         [FromBody] Request.RecordAttendanceRequest request)
@@ -59,8 +60,9 @@ public class AttendanceController : ControllerBase
     // PUT: api/attendances/{id}
     // Cập nhật trạng thái điểm danh
     // CODE CŨ: CoachAndReceptionPolicy.
-    // FIX B15: Manager cũng được sửa điểm danh.
-    [Authorize(Policy = "AttendanceViewPolicy")]
+    // CODE CŨ: [Authorize(Policy = "AttendanceViewPolicy")]
+    // FIX 23/10: chỉ Coach sửa điểm danh và phải dạy lớp tương ứng.
+    [Authorize(Policy = "CoachPolicy")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> UpdateAttendance(
         Guid id,

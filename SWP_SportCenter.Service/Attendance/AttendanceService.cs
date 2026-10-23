@@ -83,6 +83,8 @@ public class AttendanceService : IAttendanceService
     public async Task<Response.AttendanceResponse> RecordAttendanceAsync(Request.RecordAttendanceRequest request)
     {
         // 1. Kiểm tra session có tồn tại không
+        // FIX 23/10: kiểm tra ownership trước mọi thao tác ghi.
+        await EnsureCoachOwnsSessionAsync(request.SessionId);
         var session = await _context.ClassSessions
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId);
@@ -152,6 +154,10 @@ public class AttendanceService : IAttendanceService
         var attendance = await _context.Attendances.FindAsync(id);
         if (attendance == null) return false;
 
+        // CODE CŨ: cập nhật ngay sau khi tìm thấy Attendance, không kiểm tra người dạy.
+        // FIX 23/10: Coach không được sửa điểm danh lớp của người khác.
+        await EnsureCoachOwnsSessionAsync(attendance.SessionId);
+
         attendance.Status = request.Status;
         // CODE CŨ: attendance.RecordedBy = request.RecordedBy;
         // FIX B15: ghi danh tính người thực hiện cập nhật.
@@ -173,6 +179,15 @@ public class AttendanceService : IAttendanceService
 
         return true;
     }
+    // FIX 23/10: lấy Coach từ token, không tin CoachId/RecordedBy do client gửi.
+    private async Task EnsureCoachOwnsSessionAsync(Guid sessionId)
+    {
+        if (!_actor.IsCoach || !await _context.ClassSessions.AnyAsync(s =>
+                s.Id == sessionId && !s.IsDeleted && !s.Class.IsDeleted &&
+                !s.Class.Coach.IsDeleted && s.Class.Coach.AccountId == _actor.AccountId))
+            throw new UnauthorizedAccessException("Bạn chỉ được điểm danh lớp do mình phụ trách.");
+    }
+
     private async Task SyncBookingStatusAsync(Guid memberId, Guid classId)
     {
         var booking = await _context.ClassBookings
