@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Repository.Abstraction;
 using SWP_SportCenter.Repository.Entity;
 using SWP_SportCenter.Repository.Enum;
@@ -365,6 +365,15 @@ public class AppDbContext: DbContext
             builder.Property(x => x.ExperienceYears)
                 .HasColumnName("experience_years")
                 .IsRequired();
+
+            // FIX B37: Thong tin ngay sinh va gioi tinh cua Huan luyen vien
+            builder.Property(x => x.Dob)
+                .HasColumnName("dob")
+                .IsRequired(false);
+
+            builder.Property(x => x.Gender)
+                .HasColumnName("gender")
+                .HasMaxLength(20);
 
             builder.HasIndex(x => x.AccountId)
                 .IsUnique();

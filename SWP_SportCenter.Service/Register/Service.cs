@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -7,6 +7,7 @@ using SWP_SportCenter.Repository.Entity;
 using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Jwt;
 using SWP_SportCenter.Service.Until;
+using SWP_SportCenter.Service.Exceptions;
 
 namespace SWP_SportCenter.Service.Register;
 
@@ -403,5 +404,50 @@ public class Service: IService
     {
         throw new NotImplementedException(
             "Reset password requires OTP verification.");
+    }
+
+    // FIX B36: Đổi mật khẩu trong Hồ sơ cá nhân
+    public async Task<Response.AuthMessageResponse> ChangePasswordAsync(
+        Request.ChangePasswordRequest request)
+    {
+        var accountIdValue = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!Guid.TryParse(accountIdValue, out Guid accountId))
+        {
+            throw new UnauthorizedAccessException("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn.");
+        }
+
+        var account = await _dbContext.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && !a.IsDeleted);
+        if (account == null)
+        {
+            throw new KeyNotFoundException("Tài khoản không tồn tại.");
+        }
+
+        // Kiểm tra mật khẩu hiện tại bằng Argon2
+        if (!Argon2Hasher.VerifyHash(request.CurrentPassword, account.Password))
+        {
+            throw new BusinessException("Mật khẩu hiện tại không đúng.");
+        }
+
+        // Mật khẩu mới >= 8 ký tự
+        if (string.IsNullOrWhiteSpace(request.NewPassword) || request.NewPassword.Length < 8)
+        {
+            throw new BusinessException("Mật khẩu mới phải có ít nhất 8 ký tự.");
+        }
+
+        // Mật khẩu mới phải khác mật khẩu cũ
+        if (request.CurrentPassword == request.NewPassword || Argon2Hasher.VerifyHash(request.NewPassword, account.Password))
+        {
+            throw new BusinessException("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
+        }
+
+        // Băm mật khẩu mới bằng Argon2 và lưu
+        account.Password = Argon2Hasher.HashPassword(request.NewPassword);
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        await _dbContext.SaveChangesAsync();
+
+        return new Response.AuthMessageResponse
+        {
+            Message = "Đổi mật khẩu thành công."
+        };
     }
 }

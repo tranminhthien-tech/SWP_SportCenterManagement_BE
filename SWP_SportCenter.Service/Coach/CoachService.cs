@@ -31,7 +31,9 @@ public class CoachService : ICoachService
                 Email = c.Account.Email,
                 Avatar = c.Avatar,
                 Specialization = c.Specialization,
-                ExperienceYears = c.ExperienceYears
+                ExperienceYears = c.ExperienceYears,
+                Dob = c.Dob,
+                Gender = c.Gender
             })
             .ToListAsync();
     }
@@ -126,7 +128,9 @@ public class CoachService : ICoachService
         Phone = request.Phone,
         Avatar = request.Avatar ?? string.Empty,
         Specialization = request.Specialization ?? string.Empty,
-        ExperienceYears = request.ExperienceYears
+        ExperienceYears = request.ExperienceYears,
+        Dob = request.Dob,
+        Gender = request.Gender
     };
 
     _context.Coaches.Add(newCoach);
@@ -179,6 +183,8 @@ public class CoachService : ICoachService
         coach.Avatar = request.Avatar ?? string.Empty;
         coach.Specialization = request.Specialization ?? string.Empty;
         coach.ExperienceYears = request.ExperienceYears;
+        coach.Dob = request.Dob;
+        coach.Gender = request.Gender;
 
         // Email nằm ở Account
         coach.Account.Email = request.Email;
@@ -285,7 +291,9 @@ public class CoachService : ICoachService
             Email = coach.Account.Email,
             Avatar = coach.Avatar,
             Specialization = coach.Specialization,
-            ExperienceYears = coach.ExperienceYears
+            ExperienceYears = coach.ExperienceYears,
+            Dob = coach.Dob,
+            Gender = coach.Gender
         };
     }
 }
