@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Extensions;
@@ -31,7 +31,8 @@ public class CoachController : ControllerBase
         var result = await _service.GetAllAsync();
         if (User.IsInRole("CenterManager") || User.IsInRole("Receptionist")) return Ok(result);
         // FIX B9: response công khai chỉ chứa thông tin chuyên môn.
-        return Ok(result.Select(c => new { c.Id, c.FullName, c.Avatar, c.Specialization, c.ExperienceYears }));
+        // FIX B9 & B37: response cong khai tra thong tin chuyen mon, ngay sinh, gioi tinh
+        return Ok(result.Select(c => new { c.Id, c.FullName, c.Avatar, c.Specialization, c.ExperienceYears, c.Dob, c.Gender }));
     }
 
     // GET: api/coaches/{id}
@@ -49,7 +50,8 @@ public class CoachController : ControllerBase
 
         if (User.IsInRole("CenterManager") || User.IsInRole("Receptionist")) return Ok(result);
         // FIX B9: ẩn thông tin liên hệ và AccountId ở response công khai.
-        return Ok(new { result.Id, result.FullName, result.Avatar, result.Specialization, result.ExperienceYears });
+        // FIX B9 & B37: chi tiet cong khai tra thong tin chuyen mon, ngay sinh, gioi tinh
+        return Ok(new { result.Id, result.FullName, result.Avatar, result.Specialization, result.ExperienceYears, result.Dob, result.Gender });
     }
 
     // POST: api/coaches

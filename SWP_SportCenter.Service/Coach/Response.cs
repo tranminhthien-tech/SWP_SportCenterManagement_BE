@@ -15,6 +15,9 @@ public class Response
         public string? Avatar { get; set; }
         public string? Specialization { get; set; }
         public int ExperienceYears { get; set; }
+        // FIX B37: Thong tin ngay sinh va gioi tinh
+        public DateTime? Dob { get; set; }
+        public string? Gender { get; set; }
     }
 
     // DTO trả về cho API xem danh sách lớp HLV đang dạy
