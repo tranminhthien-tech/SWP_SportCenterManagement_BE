@@ -1,4 +1,4 @@
-using DotNetEnv;
+﻿using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using SWP_SportCenter.Extensions;
 using SWP_SportCenter.Repository;
@@ -88,6 +88,7 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddHostedService<SWP_SportCenter.Infrastructure.MembershipExpiryWorker>();
 builder.Services.AddScoped<RegisterService.IService, RegisterService.Service>();
 builder.Services.AddScoped<IJwtService, JwtService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.IPaymentService, SWP_SportCenter.Service.Payment.PaymentService>();
 
 var allowedOrigins = builder.Configuration
                          .GetSection("Cors:AllowedOrigins")

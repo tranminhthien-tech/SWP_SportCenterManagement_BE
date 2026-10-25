@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace SWP_SportCenter.Service.Coach;
@@ -31,6 +31,11 @@ public class Request
 
         [Range(0, 50, ErrorMessage = "Số năm kinh nghiệm không hợp lệ")]
         public int ExperienceYears { get; set; }
+
+        // FIX B37: Thông tin ngày sinh và giới tính
+        public DateTime? Dob { get; set; }
+        [MaxLength(20)]
+        public string? Gender { get; set; }
     }
 
     public class UpdateCoachRequest
@@ -56,5 +61,10 @@ public class Request
 
         [Range(0, 50, ErrorMessage = "Số năm kinh nghiệm không hợp lệ")]
         public int ExperienceYears { get; set; }
+
+        // FIX B37: Thông tin ngày sinh và giới tính
+        public DateTime? Dob { get; set; }
+        [MaxLength(20)]
+        public string? Gender { get; set; }
     }
 }

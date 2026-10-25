@@ -501,6 +501,10 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("Dob")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dob");
+
                     b.Property<int>("ExperienceYears")
                         .HasColumnType("integer")
                         .HasColumnName("experience_years");
@@ -510,6 +514,11 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)")
                         .HasColumnName("full_name");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("gender");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");

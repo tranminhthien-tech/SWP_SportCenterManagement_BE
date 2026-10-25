@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SWP_SportCenter.Service.Register;
 
@@ -77,6 +77,17 @@ public class AuthController : ControllerBase
     {
         var result = await _authService.GetMeAsync();
 
+        return Ok(result);
+    }
+
+    // POST: /api/auth/change-password
+    // FIX B36: Đổi mật khẩu tài khoản đang đăng nhập
+    [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] Request.ChangePasswordRequest request)
+    {
+        var result = await _authService.ChangePasswordAsync(request);
         return Ok(result);
     }
 }

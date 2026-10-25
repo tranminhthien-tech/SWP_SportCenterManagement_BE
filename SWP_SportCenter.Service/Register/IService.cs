@@ -20,4 +20,7 @@ public interface IService
 
     // GET /api/auth/me
     Task<Response.MeResponse> GetMeAsync();
+
+    // FIX B36: POST /api/auth/change-password
+    Task<Response.AuthMessageResponse> ChangePasswordAsync(Request.ChangePasswordRequest request);
 }

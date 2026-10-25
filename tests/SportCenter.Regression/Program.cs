@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Net.Http.Json;
 using System.Security.Claims;
@@ -62,6 +62,7 @@ builder.Services.AddScoped<SWP_SportCenter.Service.Support.SupportRequestService
 builder.Services.AddScoped<SWP_SportCenter.Service.Notification.MembershipExpiryNotifier>();
 builder.Services.AddScoped<SWP_SportCenter.Service.AuditLog.IAuditLogService, SWP_SportCenter.Service.AuditLog.AuditLogService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Accounts.IAccountService, SWP_SportCenter.Service.Accounts.AccountService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.IPaymentService, SWP_SportCenter.Service.Payment.PaymentService>();
 var app = builder.Build();
 app.UseMiddleware<SWP_SportCenter.Middleware.ApiExceptionMiddleware>();
 app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
@@ -373,6 +374,28 @@ using (var scope = app.Services.CreateScope()) {
     Check(await notifier.RunAsync() == 0, "B32 excludes expired distant and cancelled memberships");
 }
 // B33: thao tác của cả ba staff tự ghi log, POST không thể giả AccountId.
+// FIX B35: log Added ghi đúng ID thật của bản ghi, không dùng ID tạm; ghi nhận giá trị cũ -> mới (changes).
+Login(manager);
+var createRoomResp = await http.PostAsJsonAsync("/api/rooms", new { roomName = "AuditRoomB35", capacity = 15, status = 1 });
+Check(createRoomResp.IsSuccessStatusCode, "B35 create room succeeds");
+var createdRoomId = (await Json(createRoomResp)).GetProperty("id").GetGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var roomAddLog = await db.AuditLogs.OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync(x => x.ActionType == "Added:Room" && x.Description.Contains(createdRoomId.ToString()));
+    Check(roomAddLog != null && roomAddLog.Description.Contains("AuditRoomB35") && roomAddLog.Description.Contains("\"changes\""), "B35 Added:Room audit log matches real entityId and initial values");
+}
+var updateRoomResp = await http.PutAsJsonAsync($"/api/rooms/{createdRoomId}", new { roomName = "AuditRoomB35_Renamed", capacity = 20, status = 1 });
+Check(updateRoomResp.IsSuccessStatusCode, "B35 update room succeeds");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var roomModLog = await db.AuditLogs.OrderByDescending(x => x.CreatedAt)
+        .FirstOrDefaultAsync(x => x.ActionType == "Modified:Room" && x.Description.Contains(createdRoomId.ToString()));
+    Check(roomModLog != null && roomModLog.Description.Contains("AuditRoomB35") && roomModLog.Description.Contains("AuditRoomB35_Renamed"), "B35 Modified:Room audit log tracks old and new values");
+    // Kiểm tra không lộ trường nhạy cảm trong bất kỳ audit log nào.
+    var sensitiveLogs = await db.AuditLogs.Where(x => x.Description.Contains("\"Password\"") || x.Description.Contains("\"Token\"")).ToListAsync();
+    Check(sensitiveLogs.Count == 0, "B35 sensitive fields excluded from audit logs");
+}
 var auditPage = await Json(await http.GetAsync("/api/audit-logs?pageSize=500"));
 Check(auditPage.GetProperty("data").GetArrayLength() > 0 && auditPage.GetProperty("totalItems").GetInt32() > 0, "B33 automatic audit and paginated response");
 using (var scope = app.Services.CreateScope()) {
@@ -392,6 +415,64 @@ using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string
     var sql = schema.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>()
         .GenerateScript("20261022020000_MemberUnknownContact", "20261023060213_StaffWorkflowSupportNotifications");
     Check(sql.Contains("support_request") && sql.Contains("DeduplicationKey"), "B31 B32 PostgreSQL schema SQL generated");
+}
+
+// FIX B36: Doi mat khau hoc vien / nhan vien
+Login(memberAccount);
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var acc = await db.Accounts.FindAsync(memberAccount.Id);
+    acc!.Password = SWP_SportCenter.Service.Until.Argon2Hasher.HashPassword("OldPass1234");
+    await db.SaveChangesAsync();
+}
+var badOldPass = await http.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = "WrongPassword", newPassword = "NewPass1234" });
+Check(badOldPass.StatusCode == HttpStatusCode.BadRequest && (await Json(badOldPass)).GetProperty("message").GetString() == "Mật khẩu hiện tại không đúng.", "B36 change password rejects wrong current password");
+var shortNewPass = await http.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = "OldPass1234", newPassword = "short" });
+Check(shortNewPass.StatusCode == HttpStatusCode.BadRequest, "B36 change password rejects short new password");
+var samePass = await http.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = "OldPass1234", newPassword = "OldPass1234" });
+Check(samePass.StatusCode == HttpStatusCode.BadRequest, "B36 change password rejects same new password");
+var successChangePass = await http.PostAsJsonAsync("/api/auth/change-password", new { currentPassword = "OldPass1234", newPassword = "BrandNewPassword123" });
+Check(successChangePass.IsSuccessStatusCode, "B36 change password succeeds");
+
+// FIX B37: Thong tin cong khai HLV bo sung dob, gender
+http.DefaultRequestHeaders.Authorization = null;
+var publicCoachList = await Json(await http.GetAsync("/api/coaches"));
+Check(publicCoachList[0].TryGetProperty("dob", out _) && publicCoachList[0].TryGetProperty("gender", out _), "B37 public coach list includes dob and gender");
+var publicCoachDetail = await Json(await http.GetAsync("/api/coaches/" + coach.Id));
+Check(publicCoachDetail.TryGetProperty("dob", out _) && publicCoachDetail.TryGetProperty("gender", out _), "B37 public coach detail includes dob and gender");
+Login(manager);
+var staffCoachDetail = await Json(await http.GetAsync("/api/coaches/" + coach.Id));
+Check(staffCoachDetail.TryGetProperty("phone", out _) && staffCoachDetail.TryGetProperty("email", out _) && staffCoachDetail.TryGetProperty("dob", out _) && staffCoachDetail.TryGetProperty("gender", out _), "B37 staff coach detail includes all fields");
+
+// FIX B38: Dang ky va thanh toan goi tap truc tuyen
+Login(memberAccount);
+var checkoutResp = await http.PostAsJsonAsync("/api/payments/checkout", new {
+    membershipPackageId = package.Id,
+    startDate = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+    paymentMethod = 2,
+    returnUrl = "http://localhost:3000/payment/result"
+});
+Check(checkoutResp.IsSuccessStatusCode, "B38 checkout package succeeds");
+var checkoutData = await Json(checkoutResp);
+var paymentId = checkoutData.GetProperty("paymentId").GetGuid();
+var checkoutMembershipId = checkoutData.GetProperty("membershipId").GetGuid();
+Check(checkoutData.GetProperty("status").GetInt32() == 1 && checkoutData.GetProperty("paymentUrl").GetString()!.Contains("paymentId="), "B38 checkout response has Pending status and paymentUrl");
+
+var paymentDetail = await Json(await http.GetAsync($"/api/payments/{paymentId}"));
+Check(paymentDetail.GetProperty("status").GetInt32() == 1 && paymentDetail.GetProperty("amount").GetDecimal() == package.Price && paymentDetail.GetProperty("packageName").GetString() == package.PackageName, "B38 get payment detail returns Pending status");
+
+Login(otherAccount);
+Check((await http.GetAsync($"/api/payments/{paymentId}")).StatusCode == HttpStatusCode.Forbidden, "B38 other member cannot view payment");
+
+var confirmResp = await http.PostAsync($"/api/payments/{paymentId}/confirm", null);
+Check(confirmResp.IsSuccessStatusCode, "B38 payment confirmation succeeds");
+Login(memberAccount);
+var paidPaymentDetail = await Json(await http.GetAsync($"/api/payments/{paymentId}"));
+Check(paidPaymentDetail.GetProperty("status").GetInt32() == 2 && paidPaymentDetail.GetProperty("paidAt").GetString() != null, "B38 payment detail updated to Paid with paidAt");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var activatedMembership = await db.Memberships.FindAsync(checkoutMembershipId);
+    Check(activatedMembership!.Status == MembershipStatus.Active, "B38 membership activated upon payment confirmation");
 }
 Console.WriteLine($"RESULT {passed} checks passed");
 await app.StopAsync();
