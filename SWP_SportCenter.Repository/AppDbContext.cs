@@ -593,7 +593,8 @@ public class AppDbContext: DbContext
 
             builder.Property(x => x.ReceptionistId)
                 .HasColumnName("receptionist_id")
-                .IsRequired();
+                // CODE CŨ: .IsRequired();
+                .IsRequired(false); // FIX B39: online chưa có người thu.
 
             builder.Property(x => x.MemberMembershipId)
                 .HasColumnName("member_membership_id")
@@ -610,7 +611,9 @@ public class AppDbContext: DbContext
 
             builder.Property(x => x.PaymentDate)
                 .HasColumnName("payment_date")
-                .IsRequired();
+                // CODE CŨ: .IsRequired();
+                .IsRequired(false); // FIX B39: Pending chưa có ngày trả tiền.
+            builder.Property(x => x.PaymentExpiresAt).HasColumnName("payment_expires_at"); // FIX B39
 
             builder.Property(x => x.Status)
                 .HasColumnName("status")

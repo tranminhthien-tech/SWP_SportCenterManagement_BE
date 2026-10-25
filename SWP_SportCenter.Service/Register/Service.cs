@@ -128,6 +128,12 @@ public class Service: IService
                 "Account is not active");
         }
 
+        // FIX B41: chỉ rehash sau xác thực đúng và Account Active; lần đầu legacy còn chi phí cũ.
+        if (Argon2Hasher.NeedsRehash(account.Password))
+        {
+            account.Password = Argon2Hasher.HashPassword(request.Password);
+            await _dbContext.SaveChangesAsync();
+        }
         var fullName = account.Role switch
         {
             AccountRole.Member => account.Member?.FullName,
@@ -435,7 +441,9 @@ public class Service: IService
         }
 
         // Mật khẩu mới phải khác mật khẩu cũ
-        if (request.CurrentPassword == request.NewPassword || Argon2Hasher.VerifyHash(request.NewPassword, account.Password))
+        // CODE CŨ: so chuỗi hoặc VerifyHash(NewPassword, account.Password) băm thừa một lần.
+        // FIX B41: CurrentPassword đã verify đúng, so ordinal đủ kiểm tra mật khẩu mới khác cũ.
+        if (string.Equals(request.CurrentPassword, request.NewPassword, StringComparison.Ordinal))
         {
             throw new BusinessException("Mật khẩu mới không được trùng với mật khẩu hiện tại.");
         }

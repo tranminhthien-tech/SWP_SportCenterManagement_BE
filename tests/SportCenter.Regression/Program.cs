@@ -36,6 +36,8 @@ builder.Services.AddScoped<CurrentActor>();
 var bookingNow = new DateTimeOffset(2026, 10, 23, 16, 30, 0, TimeSpan.Zero);
 builder.Services.AddSingleton<TimeProvider>(new FixedClock(bookingNow));
 builder.Services.AddJwtServices(builder.Configuration);
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerServices(); // FIX B22: test tránh xung đột Swagger của route JSON/FormData.
 builder.Services.AddAuthentication(o => { o.DefaultAuthenticateScheme = "Test"; o.DefaultChallengeScheme = "Test"; })
     .AddScheme<AuthenticationSchemeOptions, TestAuth>("Test", _ => { });
 builder.Services.AddControllers(o => o.Filters.Add<SWP_SportCenter.Filters.PaginationFilter>())
@@ -63,8 +65,14 @@ builder.Services.AddScoped<SWP_SportCenter.Service.Notification.MembershipExpiry
 builder.Services.AddScoped<SWP_SportCenter.Service.AuditLog.IAuditLogService, SWP_SportCenter.Service.AuditLog.AuditLogService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Accounts.IAccountService, SWP_SportCenter.Service.Accounts.AccountService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Payment.IPaymentService, SWP_SportCenter.Service.Payment.PaymentService>();
+// FIX B22 B39: test upload giả lập không dùng secret/cloud thật, expiration dùng clock cố định.
+builder.Services.AddScoped<SWP_SportCenter.Service.MediaService.IService, TestMedia>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Receptionist.IReceptionistService, SWP_SportCenter.Service.Receptionist.ReceptionistService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.CenterManager.ICenterManagerService, SWP_SportCenter.Service.CenterManager.CenterManagerService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.PaymentExpirationService>();
 var app = builder.Build();
 app.UseMiddleware<SWP_SportCenter.Middleware.ApiExceptionMiddleware>();
+app.UseSwaggerAPI(); // FIX B22
 app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
 app.MapGet("/test/unexpected", (Func<IResult>)(() => throw new NullReferenceException("secret stack detail")));
 await app.StartAsync();
@@ -89,7 +97,8 @@ var cls = new Class { Id = Guid.NewGuid(), ClassName = "Gym", Coach = coach, Cat
 // FIX B23: fixture booking có buổi học tương lai rõ ràng.
 var session = new ClassSession { Id = Guid.NewGuid(), Class = cls, Date = DateOnly.FromDateTime(bookingNow.ToOffset(TimeSpan.FromHours(7)).DateTime).AddDays(1),
     StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(9) };
-var package = new MembershipPackage { Id = Guid.NewGuid(), PackageName = "Monthly", DurationDays = 30, Price = 100 };
+// CODE CŨ: fixture thiếu Status (0 không hợp lệ).
+var package = new MembershipPackage { Id = Guid.NewGuid(), PackageName = "Monthly", DurationDays = 30, Price = 100, Status = MembershipStatus.Active }; // FIX B39
 var membership = new Membership { Id = Guid.NewGuid(), Member = member, Package = package, StartDate = DateTime.UtcNow.AddDays(-20), EndDate = DateTime.UtcNow.AddDays(10), Status = MembershipStatus.Active };
 var plan = new TrainingPlan { Id = Guid.NewGuid(), Coach = coach, Member = member, Class = cls, Title = "Strength plan", CreatedDate = DateTime.UtcNow };
 var trainingResult = new TrainingResult { Id = Guid.NewGuid(), Coach = coach, Member = member, Plan = plan, CoachComment = "Good", PerformanceScore = 8, EvaluationDate = DateTime.UtcNow };
@@ -456,7 +465,8 @@ Check(checkoutResp.IsSuccessStatusCode, "B38 checkout package succeeds");
 var checkoutData = await Json(checkoutResp);
 var paymentId = checkoutData.GetProperty("paymentId").GetGuid();
 var checkoutMembershipId = checkoutData.GetProperty("membershipId").GetGuid();
-Check(checkoutData.GetProperty("status").GetInt32() == 1 && checkoutData.GetProperty("paymentUrl").GetString()!.Contains("paymentId="), "B38 checkout response has Pending status and paymentUrl");
+// CODE CŨ: kỳ vọng URL mock tự xác nhận không token.
+Check(checkoutData.GetProperty("status").GetInt32() == 1 && checkoutData.GetProperty("paymentUrl").ValueKind == JsonValueKind.Null, "B39 checkout Pending without unsafe mock URL");
 
 var paymentDetail = await Json(await http.GetAsync($"/api/payments/{paymentId}"));
 Check(paymentDetail.GetProperty("status").GetInt32() == 1 && paymentDetail.GetProperty("amount").GetDecimal() == package.Price && paymentDetail.GetProperty("packageName").GetString() == package.PackageName, "B38 get payment detail returns Pending status");
@@ -464,6 +474,12 @@ Check(paymentDetail.GetProperty("status").GetInt32() == 1 && paymentDetail.GetPr
 Login(otherAccount);
 Check((await http.GetAsync($"/api/payments/{paymentId}")).StatusCode == HttpStatusCode.Forbidden, "B38 other member cannot view payment");
 
+// FIX B39: người khác biết ID cũng không tự đánh dấu Paid được.
+Check((await http.PostAsync($"/api/payments/{paymentId}/confirm", null)).StatusCode == HttpStatusCode.Forbidden, "B39 Member cannot confirm");
+http.DefaultRequestHeaders.Authorization = null;
+Check((await http.PostAsync($"/api/payments/{paymentId}/confirm", null)).StatusCode == HttpStatusCode.Unauthorized, "B39 anonymous confirm denied");
+Check((await http.GetAsync($"/api/payments/mock-gateway?paymentId={paymentId}&returnUrl=https://invalid.local")).StatusCode == HttpStatusCode.Unauthorized, "B39 anonymous mock denied");
+Login(receptionistAccount);
 var confirmResp = await http.PostAsync($"/api/payments/{paymentId}/confirm", null);
 Check(confirmResp.IsSuccessStatusCode, "B38 payment confirmation succeeds");
 Login(memberAccount);
@@ -473,6 +489,112 @@ using (var scope = app.Services.CreateScope()) {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var activatedMembership = await db.Memberships.FindAsync(checkoutMembershipId);
     Check(activatedMembership!.Status == MembershipStatus.Active, "B38 membership activated upon payment confirmation");
+}
+// FIX B39: checkout không gán người thu/ngày trả trước thanh toán.
+Login(memberAccount);
+async Task<Guid> CheckoutTest() {
+    var r = await http.PostAsJsonAsync("/api/payments/checkout", new { membershipPackageId = package.Id, startDate = "2026-10-25", paymentMethod = 2 });
+    Check(r.IsSuccessStatusCode, "B39 create pending checkout fixture");
+    return (await Json(r)).GetProperty("paymentId").GetGuid();
+}
+var pendingId = await CheckoutTest();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var row = await db.Invoices.FindAsync(pendingId);
+    Check(row!.ReceptionistId == null && row.PaymentDate == null && row.PaymentExpiresAt.HasValue, "B39 Pending has no collector/paid date and has TTL");
+}
+Login(manager);
+Check((await http.GetAsync($"/api/payments/mock-gateway?paymentId={pendingId}&returnUrl=https://invalid.local")).StatusCode == HttpStatusCode.Gone, "B39 authorized GET mock cannot mutate");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var row = await db.Invoices.FindAsync(pendingId); row!.Status = InvoiceStatus.Cancelled; await db.SaveChangesAsync();
+}
+Check((await http.PostAsync($"/api/payments/{pendingId}/confirm", null)).StatusCode == HttpStatusCode.Conflict, "B39 cancelled invoice cannot be paid");
+Login(memberAccount); var expiredId = await CheckoutTest();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    (await db.Invoices.FindAsync(expiredId))!.PaymentExpiresAt = bookingNow.AddMinutes(-1); await db.SaveChangesAsync();
+}
+Login(manager);
+Check((await http.PostAsync($"/api/payments/{expiredId}/confirm", null)).StatusCode == HttpStatusCode.Conflict, "B39 expired invoice cannot be paid");
+using (var scope = app.Services.CreateScope()) {
+    Check(await scope.ServiceProvider.GetRequiredService<SWP_SportCenter.Service.Payment.PaymentExpirationService>().ExpireAsync() == 1, "B39 abandoned checkout expires");
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var row = await db.Invoices.Include(i => i.Membership).SingleAsync(i => i.Id == expiredId);
+    Check(row.Status == InvoiceStatus.Cancelled && row.Membership.Status == MembershipStatus.Cancelled && row.PaymentDate == null, "B39 expiration cancels inactive membership without fake payment");
+}
+var paidAtBefore = paidPaymentDetail.GetProperty("paidAt").GetString();
+Check((await http.PostAsync($"/api/payments/{paymentId}/confirm", null)).IsSuccessStatusCode, "B39 paid confirmation idempotent");
+Check((await Json(await http.GetAsync($"/api/payments/{paymentId}"))).GetProperty("paidAt").GetString() == paidAtBefore, "B39 retry preserves original paid date");
+
+// FIX B40: RoomService.Update(entity) đánh dấu mọi trường nhưng audit chỉ giữ diff thật.
+var auditRoom = await Json(await http.PostAsJsonAsync("/api/rooms", new { roomName = "DiffRoom", capacity = 10, status = 1 }));
+var auditRoomId = auditRoom.GetProperty("id").GetGuid();
+Check((await http.PutAsJsonAsync($"/api/rooms/{auditRoomId}", new { roomName = "DiffRoom", capacity = 11, status = 1 })).IsSuccessStatusCode, "B40 update one room field");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var logs = await db.AuditLogs.Where(a => a.ActionType == "Modified:Room").ToListAsync();
+    var payload = logs.Select(a => JsonDocument.Parse(a.Description).RootElement.Clone()).Single(x => x.GetProperty("entityId").GetGuid() == auditRoomId);
+    var fields = payload.GetProperty("changedFields").EnumerateArray().Select(x => x.GetString()).ToArray();
+    Check(fields.Contains("Capacity") && !fields.Contains("RoomName") && !fields.Contains("Status") && !fields.Contains("CreatedAt"), "B40 excludes fields whose original equals current");
+}
+// FIX B41: định dạng mới tự mô tả, không mất khả năng kiểm tra hash legacy.
+var hashNew = SWP_SportCenter.Service.Until.Argon2Hasher.HashPassword("HashTest123");
+Check(hashNew.StartsWith("$argon2id$v=19$m=19456,t=2,p=1$") && SWP_SportCenter.Service.Until.Argon2Hasher.VerifyHash("HashTest123", hashNew), "B41 new self-describing hash verifies");
+Check(!SWP_SportCenter.Service.Until.Argon2Hasher.VerifyHash("Wrong", hashNew) && !SWP_SportCenter.Service.Until.Argon2Hasher.VerifyHash("Wrong", "$argon2id$v=19$m=999999999,t=2,p=1$a$b"), "B41 wrong/malformed hashes fail safely");
+string legacy;
+var legacySalt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+using (var argon = new Konscious.Security.Cryptography.Argon2id(System.Text.Encoding.UTF8.GetBytes("LegacyTest123")) { Salt = legacySalt, MemorySize = 131072, Iterations = 4, DegreeOfParallelism = 8 })
+    legacy = Convert.ToBase64String(legacySalt) + ":" + Convert.ToBase64String(argon.GetBytes(16));
+Check(SWP_SportCenter.Service.Until.Argon2Hasher.VerifyHash("LegacyTest123", legacy), "B41 legacy 128MiB hash verifies");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    (await db.Accounts.FindAsync(otherAccount.Id))!.Password = legacy; await db.SaveChangesAsync();
+}
+http.DefaultRequestHeaders.Authorization = null;
+Check((await http.PostAsJsonAsync("/api/auth/login", new { email = otherAccount.Email, password = "LegacyTest123" })).IsSuccessStatusCode, "B41 legacy login succeeds");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check(!SWP_SportCenter.Service.Until.Argon2Hasher.NeedsRehash((await db.Accounts.FindAsync(otherAccount.Id))!.Password), "B41 successful legacy login upgrades hash");
+}
+
+// FIX B22: dùng ảnh PNG 1 pixel, fake cloud có kiểm tra định dạng nhưng không ra mạng.
+var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2i8AAAAASUVORK5CYII=");
+MultipartFormDataContent ImageForm(Dictionary<string,string>? values = null, byte[]? data = null, string filename = "avatar.png") {
+    var body = new MultipartFormDataContent();
+    if (values != null) foreach (var pair in values) body.Add(new StringContent(pair.Value), pair.Key);
+    body.Add(new ByteArrayContent(data ?? png), values == null ? "file" : "avatar", filename);
+    return body;
+}
+Check((await http.PostAsync("/api/media/images", ImageForm())).StatusCode == HttpStatusCode.Unauthorized, "B22 anonymous upload denied");
+Login(memberAccount);
+Check((await http.PostAsync("/api/media/images", ImageForm(data: new byte[] {1,2,3}))).StatusCode == HttpStatusCode.BadRequest, "B22 fake image signature rejected");
+var uploaded = await http.PostAsync("/api/media/images", ImageForm());
+Check(uploaded.IsSuccessStatusCode && (await Json(uploaded)).GetProperty("url").GetString()!.StartsWith("https://res.cloudinary.com/"), "B22 authenticated image upload returns URL");
+var formMember = new Dictionary<string,string> { ["fullName"] = "Image Member", ["phone"] = "0900000001", ["email"] = memberAccount.Email, ["dob"] = "2000-01-01", ["trainingGoal"] = "Goal" };
+Check((await http.PutAsync("/api/members/me", ImageForm(formMember))).IsSuccessStatusCode, "B22 Member me accepts multipart avatar file");
+Check((await Json(await http.GetAsync("/api/members/me"))).GetProperty("avatar").GetString() == TestMedia.Url, "B22 Member avatar URL persisted");
+Login(manager);
+var formCoach = new Dictionary<string,string> { ["fullName"] = "Image Coach", ["phone"] = "0900000003", ["email"] = coachAccount.Email, ["experienceYears"] = "3" };
+Check((await http.PutAsync($"/api/coaches/{coach.Id}", ImageForm(formCoach))).IsSuccessStatusCode, "B22 Coach multipart update");
+Check((await Json(await http.GetAsync($"/api/coaches/{coach.Id}"))).GetProperty("avatar").GetString() == TestMedia.Url, "B22 Coach avatar persisted");
+var formReception = new Dictionary<string,string> { ["fullName"] = "Image Reception", ["phone"] = "0900000004", ["email"] = receptionistAccount.Email };
+Check((await http.PutAsync($"/api/receptionists/{receptionist.Id}", ImageForm(formReception))).IsSuccessStatusCode, "B22 Receptionist multipart update");
+Check((await Json(await http.GetAsync($"/api/receptionists/{receptionist.Id}"))).GetProperty("avatar").GetString() == TestMedia.Url, "B22 Receptionist avatar persisted");
+var managerProfileId = Guid.NewGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.CenterManagers.Add(new CenterManager { Id = managerProfileId, AccountId = manager.Id, FullName = "Manager", Phone = "0900000099" }); await db.SaveChangesAsync();
+}
+var formManager = new Dictionary<string,string> { ["fullName"] = "Image Manager", ["phone"] = "0900000099", ["email"] = manager.Email };
+Check((await http.PutAsync($"/api/center-managers/{managerProfileId}", ImageForm(formManager))).IsSuccessStatusCode, "B22 Manager multipart update");
+Check((await Json(await http.GetAsync($"/api/center-managers/{managerProfileId}"))).GetProperty("avatar").GetString() == TestMedia.Url, "B22 Manager avatar persisted");
+Check((await http.GetAsync("/swagger/v1/swagger.json")).IsSuccessStatusCode, "B22 Swagger works with JSON and multipart actions");
+using (var formNoImage = new MultipartFormDataContent()) {
+    foreach (var pair in formManager) formNoImage.Add(new StringContent(pair.Value), pair.Key);
+    Check((await http.PutAsync($"/api/center-managers/{managerProfileId}", formNoImage)).IsSuccessStatusCode &&
+        (await Json(await http.GetAsync($"/api/center-managers/{managerProfileId}"))).GetProperty("avatar").GetString() == TestMedia.Url,
+        "B22 multipart without new file preserves existing URL");
 }
 Console.WriteLine($"RESULT {passed} checks passed");
 await app.StopAsync();
@@ -495,4 +617,15 @@ sealed class TestAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILog
 sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now;
+}
+
+// FIX B22: cloud fake riêng trong test, không đưa credential vào repo hoặc gọi Cloudinary thật.
+sealed class TestMedia : SWP_SportCenter.Service.MediaService.IService
+{
+    public const string Url = "https://res.cloudinary.com/test/image/upload/avatar.png";
+    public async Task<string> UploadAsync(IFormFile file) {
+        await SWP_SportCenter.Service.MediaService.ImageValidation.ValidateAsync(file);
+        return Url;
+    }
+    public Task<string> UploadVideoAsync(IFormFile file) => throw new NotSupportedException();
 }

@@ -1,3 +1,4 @@
+/* CODE CŨ B41: giữ nguyên triển khai cũ để đối chiếu, không thực thi.
 using System.Security.Cryptography;
 using System.Text;
 using Konscious.Security.Cryptography;
@@ -65,5 +66,70 @@ public static class Argon2Hasher
         {
             return false; // Nếu chuỗi sai format hoặc có lỗi thì trả về false
         }
+    }
+}
+*/
+using System.Security.Cryptography;
+using System.Text;
+using Konscious.Security.Cryptography;
+
+namespace SWP_SportCenter.Service.Until;
+
+// FIX B41: Argon2id theo baseline OWASP, format tự mô tả tham số.
+// Legacy salt:hash vẫn verify bằng 128 MiB / 4 vòng / 8 luồng.
+public static class Argon2Hasher
+{
+    private const int Memory = 19456, Iterations = 2, Parallelism = 1;
+    public static string HashPassword(string password)
+    {
+        var salt = RandomNumberGenerator.GetBytes(16);
+        var hash = Derive(password, salt, Memory, Iterations, Parallelism, 32);
+        return $"$argon2id$v=19$m={Memory},t={Iterations},p={Parallelism}$" +
+            Convert.ToBase64String(salt) + "$" + Convert.ToBase64String(hash);
+    }
+    public static bool NeedsRehash(string stored) => !stored.StartsWith(
+        "$argon2id$v=19$m=19456,t=2,p=1$", StringComparison.Ordinal);
+
+    public static bool VerifyHash(string password, string stored)
+    {
+        try
+        {
+            int memory, iterations, parallelism; byte[] salt, expected;
+            if (stored.StartsWith("$argon2id$", StringComparison.Ordinal))
+            {
+                var parts = stored.Split('$');
+                if (parts.Length != 6 || parts[2] != "v=19") return false;
+                var parameters = parts[3].Split(',');
+                if (parameters.Length != 3 || !parameters[0].StartsWith("m=") ||
+                    !parameters[1].StartsWith("t=") || !parameters[2].StartsWith("p=")) return false;
+                memory = int.Parse(parameters[0][2..]); iterations = int.Parse(parameters[1][2..]);
+                parallelism = int.Parse(parameters[2][2..]);
+                // Không cho hash malformed yêu cầu tài nguyên vô hạn.
+                if (memory < 8192 || memory > 131072 || iterations < 1 || iterations > 4 ||
+                    parallelism < 1 || parallelism > 8) return false;
+                salt = Convert.FromBase64String(parts[4]); expected = Convert.FromBase64String(parts[5]);
+            }
+            else
+            {
+                var parts = stored.Split(':');
+                if (parts.Length != 2) return false;
+                salt = Convert.FromBase64String(parts[0]); expected = Convert.FromBase64String(parts[1]);
+                memory = 131072; iterations = 4; parallelism = 8;
+                if (expected.Length != 16) return false;
+            }
+            if (salt.Length != 16 || expected.Length is not (16 or 32)) return false;
+            return CryptographicOperations.FixedTimeEquals(expected,
+                Derive(password, salt, memory, iterations, parallelism, expected.Length));
+        }
+        catch (FormatException) { return false; }
+        catch (OverflowException) { return false; }
+        catch (ArgumentException) { return false; }
+    }
+    private static byte[] Derive(string password, byte[] salt, int memory, int iterations, int parallelism, int length)
+    {
+        using var argon = new Argon2id(Encoding.UTF8.GetBytes(password)) {
+            Salt = salt, MemorySize = memory, Iterations = iterations, DegreeOfParallelism = parallelism
+        };
+        return argon.GetBytes(length);
     }
 }

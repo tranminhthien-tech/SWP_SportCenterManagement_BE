@@ -445,7 +445,9 @@ public async Task<Base.Response.PageResult<Response.MembershipResponse>>
         _dbContext.Invoices.Add(new Repository.Entity.Invoice {
             Id = Guid.NewGuid(), ReceptionistId = staffId.Value, Membership = renewed,
             Amount = membership.Package.Price, Status = InvoiceStatus.Pending,
-            PaymentDate = DateTimeOffset.UtcNow, PaymentMethod = (PaymentMethod)1
+            // CODE CŨ: PaymentDate = DateTimeOffset.UtcNow, PaymentMethod = (PaymentMethod)1
+            // FIX B39: hóa đơn gia hạn Pending chưa có ngày thanh toán.
+            PaymentDate = null, PaymentMethod = (PaymentMethod)1
         });
         await _dbContext.SaveChangesAsync();
         await _dbContext.Entry(renewed).Reference(x => x.Member).LoadAsync();

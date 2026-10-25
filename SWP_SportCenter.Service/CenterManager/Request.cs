@@ -7,6 +7,7 @@ public class Request
 {
     public class CreateCenterManagerRequest
     {
+        public string? Avatar { get; set; } // FIX B22: URL ảnh cloud.
         [Required(ErrorMessage = "Vui lòng cung cấp Account ID")]
         public Guid AccountId { get; set; }
 
@@ -26,6 +27,7 @@ public class Request
 
     public class UpdateCenterManagerRequest
     {
+        public string? Avatar { get; set; } // FIX B22
         [Required(ErrorMessage = "Họ tên không được để trống")]
         [MaxLength(150)]
         public string FullName { get; set; } = string.Empty;

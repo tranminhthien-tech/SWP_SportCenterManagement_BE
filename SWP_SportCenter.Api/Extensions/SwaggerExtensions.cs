@@ -9,6 +9,10 @@ public static class SwaggerExtensions
     {
         services.AddSwaggerGen(options =>
         {
+            // FIX B22: cùng route hỗ trợ JSON và FormData qua hai action.
+            // Swagger giữ mô tả JSON để tương thích; upload file có schema riêng /api/media/images.
+            options.ResolveConflictingActions(actions => actions.FirstOrDefault(a =>
+                a.SupportedRequestFormats.Any(f => f.MediaType == "application/json")) ?? actions.First());
             options.SwaggerDoc("v1", new OpenApiInfo
             {
                 Title = "SWP_SportCenter APIs",

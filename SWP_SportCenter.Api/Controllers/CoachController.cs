@@ -9,7 +9,8 @@ namespace SWP_SportCenter.Controllers;
 
 [ApiController]
 [Route("api/coaches")]
-public class CoachController : ControllerBase
+// CODE CŨ: public class CoachController : ControllerBase
+public partial class CoachController : ControllerBase // FIX B22: thêm action multipart ở partial.
 {
     private readonly ICoachService _service;
 
@@ -58,6 +59,7 @@ public class CoachController : ControllerBase
     // Tạo hồ sơ Coach mới
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
+    [Consumes("application/json")] // FIX B22: giữ JSON, thêm action FormData riêng.
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateCoachRequest request)
     {
@@ -79,6 +81,7 @@ public class CoachController : ControllerBase
     // Cập nhật thông tin Coach
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
+    [Consumes("application/json")] // FIX B22
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] Request.UpdateCoachRequest request)

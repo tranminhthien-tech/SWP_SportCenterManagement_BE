@@ -26,7 +26,9 @@ public class DashboardService : IDashboardService
             .ToListAsync();
 
         var monthly = invoices
-            .GroupBy(i => new { i.PaymentDate.Year, i.PaymentDate.Month })
+            // CODE CŨ: .GroupBy(i => new { i.PaymentDate.Year, i.PaymentDate.Month })
+            // FIX B39: các hóa đơn Paid được lọc theo PaymentDate có giá trị ở trên.
+            .GroupBy(i => new { i.PaymentDate!.Value.Year, i.PaymentDate.Value.Month })
             .Select(g => new Response.MonthlyRevenueItem
             {
                 Year = g.Key.Year,

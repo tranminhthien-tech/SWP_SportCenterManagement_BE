@@ -27,6 +27,7 @@ public class CenterManagerService : ICenterManagerService
                 Id = cm.Id,
                 AccountId = cm.AccountId,
                 FullName = cm.FullName,
+                Avatar = cm.Avatar, // FIX B22
                 Phone = cm.Phone,
                 Email = cm.Account.Email
             })
@@ -35,7 +36,8 @@ public class CenterManagerService : ICenterManagerService
 
     public async Task<Response.CenterManagerResponse?> GetByIdAsync(Guid id)
     {
-        var manager = await _context.CenterManagers.AsNoTracking().FirstOrDefaultAsync(cm => cm.Id == id);
+        // CODE CŨ: không Include Account trước mapping Email.
+        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account).FirstOrDefaultAsync(cm => cm.Id == id); // FIX B22
         if (manager == null) return null;
 
         return MapToResponse(manager);
@@ -43,7 +45,8 @@ public class CenterManagerService : ICenterManagerService
 
     public async Task<Response.CenterManagerResponse?> GetByAccountIdAsync(Guid accountId)
     {
-        var manager = await _context.CenterManagers.AsNoTracking().FirstOrDefaultAsync(cm => cm.AccountId == accountId);
+        // CODE CŨ: không Include Account.
+        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account).FirstOrDefaultAsync(cm => cm.AccountId == accountId); // FIX B22
         if (manager == null) return null;
 
         return MapToResponse(manager);
@@ -89,6 +92,7 @@ public class CenterManagerService : ICenterManagerService
         {
             AccountId = request.AccountId,
             FullName = request.FullName,
+            Avatar = request.Avatar, // FIX B22
             Phone = request.Phone,
             // FIX: gắn Account để response lấy được Email ngay sau khi lưu.
             Account = account,
@@ -137,6 +141,7 @@ public class CenterManagerService : ICenterManagerService
         // Cập nhật thông tin CenterManager
         manager.FullName = request.FullName;
         manager.Phone = request.Phone;
+        manager.Avatar = request.Avatar; // FIX B22
 
         // Email nằm ở Account, KHÔNG còn nằm ở CenterManager
         manager.Account.Email = request.Email;
@@ -164,6 +169,7 @@ public class CenterManagerService : ICenterManagerService
             Id = manager.Id,
             AccountId = manager.AccountId,
             FullName = manager.FullName,
+            Avatar = manager.Avatar, // FIX B22
             Phone = manager.Phone,
             Email = manager.Account.Email
         };

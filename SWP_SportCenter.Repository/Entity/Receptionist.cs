@@ -4,6 +4,7 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class Receptionist: BaseEntity, IAuditableEntity
 {
+    public string? Avatar { get; set; } // FIX B22: URL ảnh cloud.
     public string FullName { get; set; } = string.Empty;
 
     public string Phone { get; set; } = string.Empty;

@@ -8,20 +8,27 @@ namespace SWP_SportCenter.Service.CloudinaryService;
 
 public class CloudinaryService: IService
 {
-    private readonly Cloudinary _cloudinary;
+    // CODE CŨ: private readonly Cloudinary _cloudinary;
+    // FIX B22: tạo client khi thực sự upload, không làm hỏng form không đổi ảnh.
+    private readonly Lazy<Cloudinary> _cloudinary;
     private readonly CloudinaryOptions _cloudinaryOptions = new();
 
     public CloudinaryService(IConfiguration configuration)
     {
         configuration.GetSection(nameof(CloudinaryOptions)).Bind(_cloudinaryOptions);
-        _cloudinary = new Cloudinary(new Account(
-            _cloudinaryOptions.CloudName,
-            _cloudinaryOptions.ApiKey,
-            _cloudinaryOptions.ApiSecret));
+        /* CODE CŨ: _cloudinary = new Cloudinary(new Account(
+            _cloudinaryOptions.CloudName, _cloudinaryOptions.ApiKey, _cloudinaryOptions.ApiSecret)); */
+        _cloudinary = new Lazy<Cloudinary>(() => new Cloudinary(new Account(
+            _cloudinaryOptions.CloudName, _cloudinaryOptions.ApiKey, _cloudinaryOptions.ApiSecret))); // FIX B22
     }
 
     public async Task<string> UploadAsync(IFormFile file)
     {
+        // FIX B22: endpoint ảnh không nhận video; giới hạn và xác thực chữ ký trước gọi cloud.
+        await ImageValidation.ValidateAsync(file);
+        if (string.IsNullOrWhiteSpace(_cloudinaryOptions.CloudName) || string.IsNullOrWhiteSpace(_cloudinaryOptions.ApiKey) ||
+            string.IsNullOrWhiteSpace(_cloudinaryOptions.ApiSecret))
+            throw new HttpRequestException("Dịch vụ ảnh chưa được cấu hình trên server.");
         if (file == null || file.Length == 0)
             throw new ArgumentException("File is empty or null.", nameof(file));
 
@@ -34,10 +41,13 @@ public class CloudinaryService: IService
                 File = new FileDescription(file.FileName, stream)
             };
 
-            var result = await _cloudinary.UploadAsync(uploadParams);
+            // CODE CŨ: _cloudinary.UploadAsync(uploadParams)
+            var result = await _cloudinary.Value.UploadAsync(uploadParams); // FIX B22
 
-            if (result.Error != null)
-                throw new Exception(result.Error.Message);
+            // CODE CŨ: throw new Exception(result.Error.Message);
+            // FIX B22: không đưa thông tin kỹ thuật/credential từ provider ra client.
+            if (result.Error != null || result.SecureUrl == null)
+                throw new HttpRequestException("Không thể tải ảnh lên dịch vụ lưu trữ.");
 
             return result.SecureUrl.ToString();
         }
@@ -49,7 +59,8 @@ public class CloudinaryService: IService
                 File = new FileDescription(file.FileName, stream)
             };
 
-            var result = await _cloudinary.UploadAsync(uploadParams);
+            // CODE CŨ: _cloudinary.UploadAsync(uploadParams)
+            var result = await _cloudinary.Value.UploadAsync(uploadParams); // FIX B22
 
             if (result.Error != null)
                 throw new Exception(result.Error.Message);
@@ -74,7 +85,8 @@ public class CloudinaryService: IService
                 File = new FileDescription(file.FileName, stream)
             };
 
-            var result = await _cloudinary.UploadAsync(uploadParams);
+            // CODE CŨ: _cloudinary.UploadAsync(uploadParams)
+            var result = await _cloudinary.Value.UploadAsync(uploadParams); // FIX B22
 
             if (result.Error != null)
                 throw new Exception(result.Error.Message);
