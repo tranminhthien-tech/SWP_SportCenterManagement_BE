@@ -1,3 +1,4 @@
+/* CODE CŨ B39: xác nhận không kiểm tra quyền/trạng thái và gán ngẫu nhiên lễ tân.
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -172,4 +173,91 @@ public class PaymentService : IPaymentService
             PaidAt = invoice.PaymentDate
         };
     }
+}
+*/
+using Microsoft.EntityFrameworkCore;
+using SWP_SportCenter.Repository;
+using SWP_SportCenter.Repository.Entity;
+using SWP_SportCenter.Repository.Enum;
+using SWP_SportCenter.Service.Security;
+using SWP_SportCenter.Service.Exceptions;
+
+namespace SWP_SportCenter.Service.Payment;
+
+// FIX B39: checkout online có TTL, không dùng GET/returnUrl làm bằng chứng đã trả tiền.
+public class PaymentService(AppDbContext db, CurrentActor actor, TimeProvider? clock = null) : IPaymentService
+{
+    private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
+    public async Task<Response.CheckoutResponse> CheckoutAsync(Request.CheckoutRequest request)
+    {
+        var memberId = await actor.MemberIdAsync();
+        var package = await db.MembershipPackages.FirstOrDefaultAsync(p => p.Id == request.MembershipPackageId && !p.IsDeleted);
+        if (package == null) throw new KeyNotFoundException("Gói tập không tồn tại.");
+        if (package.Status != MembershipStatus.Active || package.DurationDays <= 0 || package.Price <= 0)
+            throw new BusinessException("Gói không khả dụng hoặc giá/thời hạn không hợp lệ.");
+        if (request.PaymentMethod is not (2 or 3)) throw new BusinessException("Chỉ hỗ trợ chuyển khoản hoặc thẻ.");
+        var today = Now.UtcDateTime.Date;
+        var start = DateTime.SpecifyKind(request.StartDate.Date < today ? today : request.StartDate.Date, DateTimeKind.Utc);
+        var membership = new Repository.Entity.Membership {
+            Id = Guid.NewGuid(), MemberId = memberId, PackageId = package.Id,
+            StartDate = start, EndDate = start.AddDays(package.DurationDays - 1), Status = MembershipStatus.Inactive
+        };
+        var invoice = new Repository.Entity.Invoice {
+            Id = Guid.NewGuid(), Membership = membership, Amount = package.Price,
+            ReceptionistId = null, PaymentDate = null, PaymentExpiresAt = Now.AddMinutes(30),
+            Status = InvoiceStatus.Pending, PaymentMethod = (PaymentMethod)request.PaymentMethod
+        };
+        db.Invoices.Add(invoice);
+        await db.SaveChangesAsync();
+        return new() { PaymentId = invoice.Id, InvoiceId = invoice.Id, MembershipId = membership.Id,
+            Amount = invoice.Amount, Status = 1, PaymentUrl = null }; // Chưa có gateway thật.
+    }
+    public async Task<Response.PaymentDetailResponse> GetPaymentAsync(Guid paymentId)
+    {
+        var row = await Load(paymentId);
+        if (actor.IsMember)
+        {
+            if (row.Membership.MemberId != await actor.MemberIdAsync())
+                throw new UnauthorizedAccessException("Bạn chỉ được xem giao dịch của chính mình.");
+        }
+        else if (!actor.CanConfirmPayment) throw new UnauthorizedAccessException("Không có quyền xem thanh toán.");
+        // GET chỉ đọc; background job xử lý hết hạn.
+        return Map(row);
+    }
+    public async Task<Response.PaymentDetailResponse> ConfirmPaymentAsync(Guid paymentId)
+    {
+        if (!actor.CanConfirmPayment) throw new UnauthorizedAccessException("Chỉ quản lý hoặc lễ tân được xác nhận thủ công.");
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
+        var row = await Load(paymentId);
+        if (row.Status == InvoiceStatus.Paid) return Map(row); // idempotent, không đổi ngày trả.
+        if (row.Status != InvoiceStatus.Pending || !row.PaymentExpiresAt.HasValue ||
+            row.PaymentExpiresAt <= Now || row.Membership.IsDeleted ||
+            row.Membership.Status != MembershipStatus.Inactive)
+            throw new ConflictException("Giao dịch đã hủy, hết hạn hoặc không còn chờ thanh toán.");
+        if (row.Membership.Member.IsDeleted || row.Membership.Member.Account.IsDeleted ||
+            row.Membership.Member.Account.Status != AccountStatus.Active)
+            throw new ConflictException("Tài khoản hội viên không còn hoạt động.");
+        row.Status = InvoiceStatus.Paid;
+        row.PaymentDate = Now;
+        row.Membership.Status = MembershipStatus.Active;
+        // Xác nhận thủ công: chỉ ghi lễ tân nếu chính người gọi có profile lễ tân.
+        row.ReceptionistId = await db.Receptionists.Where(r => r.AccountId == actor.AccountId && !r.IsDeleted)
+            .Select(r => (Guid?)r.Id).FirstOrDefaultAsync();
+        await db.SaveChangesAsync();
+        if (transaction != null) await transaction.CommitAsync();
+        return Map(row);
+    }
+    private async Task<Repository.Entity.Invoice> Load(Guid id) => await db.Invoices
+        .Include(i => i.Membership).ThenInclude(m => m.Package)
+        .Include(i => i.Membership).ThenInclude(m => m.Member).ThenInclude(m => m.Account)
+        .FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted)
+        ?? throw new KeyNotFoundException("Không tìm thấy giao dịch thanh toán.");
+    private Response.PaymentDetailResponse Map(Repository.Entity.Invoice row) => new() {
+        PaymentId = row.Id, InvoiceId = row.Id, MembershipId = row.MemberMembershipId,
+        Amount = row.Amount, PackageName = row.Membership.Package.PackageName,
+        Status = row.Status == InvoiceStatus.Paid ? 2 : row.Status == InvoiceStatus.Cancelled ||
+            row.PaymentExpiresAt <= Now ? 4 : 1,
+        PaidAt = row.Status == InvoiceStatus.Paid ? row.PaymentDate : null
+    };
 }

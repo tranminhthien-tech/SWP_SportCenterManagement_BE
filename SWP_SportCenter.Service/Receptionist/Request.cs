@@ -21,6 +21,8 @@ public class Request
         [EmailAddress(ErrorMessage = "Email không hợp lệ")]
         [MaxLength(150)]
         public string Email { get; set; } = string.Empty;
+        // FIX B22: URL Cloudinary, không chứa file/secret.
+        public string? Avatar { get; set; }
 
         [MaxLength(100)]
         public string? WorkingShift { get; set; }
@@ -40,6 +42,8 @@ public class Request
         [EmailAddress(ErrorMessage = "Email không hợp lệ")]
         [MaxLength(150)]
         public string Email { get; set; } = string.Empty;
+        // FIX B22: URL Cloudinary, không chứa file/secret.
+        public string? Avatar { get; set; }
 
         [MaxLength(100)]
         public string? WorkingShift { get; set; }

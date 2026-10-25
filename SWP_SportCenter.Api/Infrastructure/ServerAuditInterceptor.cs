@@ -64,7 +64,11 @@ public sealed class ServerAuditInterceptor(IHttpContextAccessor http) : SaveChan
             }
             else if (entry.State == EntityState.Modified)
             {
-                foreach (var prop in entry.Properties.Where(p => p.IsModified))
+                // CODE CŨ: foreach (var prop in entry.Properties.Where(p => p.IsModified))
+                // FIX B40: Update(entity) đánh dấu mọi cột; so bằng ValueComparer của EF.
+                foreach (var prop in entry.Properties.Where(p => p.IsModified &&
+                             !(p.Metadata.GetValueComparer()?.Equals(p.OriginalValue, p.CurrentValue)
+                               ?? Equals(p.OriginalValue, p.CurrentValue))))
                 {
                     var name = prop.Metadata.Name;
                     if (IsSensitive(name)) continue;
@@ -83,6 +87,8 @@ public sealed class ServerAuditInterceptor(IHttpContextAccessor http) : SaveChan
                 }
             }
 
+            // FIX B40: không tạo dòng Modified rỗng (vd. chỉ password bị loại vì nhạy cảm).
+            if (entry.State == EntityState.Modified && changedFieldsList.Count == 0) continue;
             var auditPayload = new
             {
                 entityId = id,

@@ -4,6 +4,7 @@ public class Response
 {
     public class ReceptionistResponse
     {
+        public string? Avatar { get; set; } // FIX B22
         public Guid Id { get; set; }
         public Guid AccountId { get; set; }
         public string FullName { get; set; } = string.Empty;

@@ -8,7 +8,8 @@ namespace SWP_SportCenter.Controllers;
 
 [ApiController]
 [Route("api/center-managers")]
-public class CenterManagerController : ControllerBase
+// CODE CŨ: public class CenterManagerController : ControllerBase
+public partial class CenterManagerController : ControllerBase // FIX B22
 {
     private readonly ICenterManagerService _centerManagerService;
 
@@ -72,6 +73,7 @@ public class CenterManagerController : ControllerBase
     // Tạo hồ sơ quản lý trung tâm
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
+    [Consumes("application/json")] // FIX B22: giữ JSON, thêm action FormData riêng.
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateCenterManagerRequest request)
     {
@@ -92,6 +94,7 @@ public class CenterManagerController : ControllerBase
     // Cập nhật hồ sơ quản lý
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
+    [Consumes("application/json")] // FIX B22
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] Request.UpdateCenterManagerRequest request)

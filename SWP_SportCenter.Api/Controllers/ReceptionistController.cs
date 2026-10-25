@@ -9,7 +9,8 @@ namespace SWP_SportCenter.Controllers;
 
 [ApiController]
 [Route("api/receptionists")]
-public class ReceptionistController : ControllerBase
+// CODE CŨ: public class ReceptionistController : ControllerBase
+public partial class ReceptionistController : ControllerBase // FIX B22
 {
     private readonly IReceptionistService _receptionistService;
 
@@ -68,6 +69,7 @@ public class ReceptionistController : ControllerBase
     // POST: api/receptionists
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPost]
+    [Consumes("application/json")] // FIX B22: giữ JSON, thêm action FormData riêng.
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateReceptionistRequest request)
     {
@@ -87,6 +89,7 @@ public class ReceptionistController : ControllerBase
     // PUT: api/receptionists/{id}
     [Authorize(Policy = JwtExtensions.CenterManagerPolicy)]
     [HttpPut("{id:guid}")]
+    [Consumes("application/json")] // FIX B22
     public async Task<IActionResult> Update(
         Guid id,
         [FromBody] Request.UpdateReceptionistRequest request)

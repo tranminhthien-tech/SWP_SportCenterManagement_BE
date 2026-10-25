@@ -34,6 +34,7 @@ public class ReceptionistService : IReceptionistService
                 Id = r.Id,
                 AccountId = r.AccountId,
                 FullName = r.FullName,
+                Avatar = r.Avatar, // FIX B22
                 Phone = r.Phone,
                 Email = r.Account != null ? r.Account.Email : string.Empty,
                 WorkingShift = r.WorkingShift
@@ -62,6 +63,7 @@ public class ReceptionistService : IReceptionistService
                 Id = r.Id,
                 AccountId = r.AccountId,
                 FullName = r.FullName,
+                Avatar = r.Avatar, // FIX B22
                 Phone = r.Phone,
                 Email = r.Account != null ? r.Account.Email : string.Empty,
                 WorkingShift = r.WorkingShift
@@ -90,6 +92,7 @@ public class ReceptionistService : IReceptionistService
                 Id = r.Id,
                 AccountId = r.AccountId,
                 FullName = r.FullName,
+                Avatar = r.Avatar, // FIX B22
                 Phone = r.Phone,
                 Email = r.Account != null ? r.Account.Email : string.Empty,
                 WorkingShift = r.WorkingShift
@@ -147,6 +150,7 @@ public class ReceptionistService : IReceptionistService
         {
             AccountId = request.AccountId,
             FullName = request.FullName.Trim(),
+            Avatar = request.Avatar, // FIX B22
             Phone = request.Phone.Trim(),
             WorkingShift = request.WorkingShift?.Trim() ?? string.Empty,
 
@@ -232,6 +236,7 @@ public class ReceptionistService : IReceptionistService
 
         receptionist.FullName = request.FullName.Trim();
         receptionist.Phone = request.Phone.Trim();
+        receptionist.Avatar = request.Avatar; // FIX B22
         receptionist.WorkingShift = request.WorkingShift?.Trim()
                                     ?? string.Empty;
         receptionist.Account.Email = email;
@@ -331,6 +336,7 @@ public class ReceptionistService : IReceptionistService
             Id = receptionist.Id,
             AccountId = receptionist.AccountId,
             FullName = receptionist.FullName,
+            Avatar = receptionist.Avatar, // FIX B22
             Phone = receptionist.Phone,
             Email = receptionist.Account?.Email ?? string.Empty,
             WorkingShift = receptionist.WorkingShift

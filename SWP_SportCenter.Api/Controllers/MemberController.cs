@@ -7,7 +7,8 @@ namespace SWP_SportCenter.Controllers;
 
 [ApiController]
 [Route("api/members")]
-public class MemberController: ControllerBase
+// CODE CŨ: public class MemberController: ControllerBase
+public partial class MemberController: ControllerBase // FIX B22
 {
     private readonly IService _service;
     public MemberController(IService service)
@@ -57,6 +58,7 @@ public class MemberController: ControllerBase
     // Tạo Member
     [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPost]
+    [Consumes("application/json")] // FIX B22: giữ JSON, thêm action FormData riêng.
     public async Task<IActionResult> Create(
         [FromBody] Request.MemberRequest request)
     {
@@ -71,6 +73,7 @@ public class MemberController: ControllerBase
     // FIX B24: lễ tân được sửa hồ sơ tại quầy, không mở quyền xóa.
     [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
     [HttpPut("{id:guid}")]
+    [Consumes("application/json")] // FIX B22
     public async Task<IActionResult> Update(
         [FromRoute] Guid id,
         [FromBody] Request.MemberRequest request)
@@ -122,6 +125,7 @@ public class MemberController: ControllerBase
     // Cập nhật profile của Member đang đăng nhập
     [Authorize(Policy = JwtExtensions.MemberPolicy)]
     [HttpPut("me")]
+    [Consumes("application/json")] // FIX B22
     public async Task<IActionResult> UpdateMyProfile(
         [FromBody] Request.MemberRequest request)
     {

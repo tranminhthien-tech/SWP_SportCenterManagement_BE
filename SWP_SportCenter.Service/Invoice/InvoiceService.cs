@@ -94,7 +94,9 @@ public class InvoiceService : IInvoiceService
             MemberMembershipId = request.MemberMembershipId,
             Amount = request.Amount,
             PaymentMethod = request.PaymentMethod,
-            PaymentDate = DateTimeOffset.UtcNow,
+            // CODE CŨ: PaymentDate = DateTimeOffset.UtcNow,
+            // FIX B39: hóa đơn chưa trả tiền không có PaymentDate.
+            PaymentDate = request.Status == InvoiceStatus.Paid ? DateTimeOffset.UtcNow : null,
             Status = request.Status
         };
 

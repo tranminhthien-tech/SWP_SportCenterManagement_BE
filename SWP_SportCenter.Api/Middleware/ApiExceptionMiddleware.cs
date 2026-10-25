@@ -17,6 +17,8 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             {
                 BusinessException or ArgumentException or System.ComponentModel.DataAnnotations.ValidationException => 400,
                 ConflictException => 409,
+                // FIX B22: lỗi dịch vụ ảnh ngoài trả 502 JSON, không xuất stack/provider secret.
+                HttpRequestException => 502,
                 UnauthorizedAccessException => context.User.Identity?.IsAuthenticated == true ? 403 : 401,
                 KeyNotFoundException => 404,
                 DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } } => 409,

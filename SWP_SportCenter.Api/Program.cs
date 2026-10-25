@@ -45,6 +45,9 @@ if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Default
 // FIX B19: áp dụng giới hạn phân trang cho mọi action có pageSize/pageIndex.
 builder.Services.AddControllers(o => o.Filters.Add<SWP_SportCenter.Filters.PaginationFilter>());
 builder.Services.AddHttpContextAccessor();
+// FIX B39: hủy giao dịch online quá hạn, giữ dữ liệu lịch sử.
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.PaymentExpirationService>();
+builder.Services.AddHostedService<SWP_SportCenter.Infrastructure.PaymentExpirationWorker>();
 // FIX B4 B5 B7 B15: dùng chung cách lấy Account/Member từ token.
 builder.Services.AddScoped<SWP_SportCenter.Service.Security.CurrentActor>();
 builder.Services.AddEndpointsApiExplorer();

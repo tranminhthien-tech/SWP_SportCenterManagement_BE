@@ -297,6 +297,9 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("Avatar")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -609,15 +612,19 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("member_membership_id");
 
-                    b.Property<DateTimeOffset>("PaymentDate")
+                    b.Property<DateTimeOffset?>("PaymentDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("payment_date");
+
+                    b.Property<DateTimeOffset?>("PaymentExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("payment_expires_at");
 
                     b.Property<int>("PaymentMethod")
                         .HasColumnType("integer")
                         .HasColumnName("payment_method");
 
-                    b.Property<Guid>("ReceptionistId")
+                    b.Property<Guid?>("ReceptionistId")
                         .HasColumnType("uuid")
                         .HasColumnName("receptionist_id");
 
@@ -871,6 +878,9 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<Guid>("AccountId")
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
+
+                    b.Property<string>("Avatar")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1259,8 +1269,7 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.HasOne("SWP_SportCenter.Repository.Entity.Receptionist", "Receptionist")
                         .WithMany("Invoices")
                         .HasForeignKey("ReceptionistId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Membership");
 
