@@ -25,6 +25,10 @@ using MembershipService = SWP_SportCenter.Service.Membership;
 using TrainingPlanService = SWP_SportCenter.Service.TrainingPlan;
 using TrainingResultService = SWP_SportCenter.Service.TrainingResult;
 
+using CloudService = SWP_SportCenter.Service.CloudinaryService;
+
+using MediaService = SWP_SportCenter.Service.MediaService;
+
 Env.Load();
 
 var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
@@ -76,6 +80,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IReceptionistService, ReceptionistService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<MediaService.IService,CloudService.CloudinaryService>();
 // FIX B31 B32: API hỗ trợ và job nhắc hạn chạy tại BE.
 builder.Services.AddScoped<SWP_SportCenter.Service.Support.SupportRequestService>();
 builder.Services.AddScoped<MembershipExpiryNotifier>();
