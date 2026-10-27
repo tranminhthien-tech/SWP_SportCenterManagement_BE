@@ -7,6 +7,9 @@ public class Response
 {
     public class BookingResponse
     {
+        // FIX B45: thẻ dùng để xét quyền lúc đặt, không thay đổi DB booking cũ.
+        public Guid? EligibleMembershipId { get; set; }
+        public DateTime? MembershipEndDate { get; set; }
         public Guid Id { get; set; }
         
         public Guid MemberId { get; set; }

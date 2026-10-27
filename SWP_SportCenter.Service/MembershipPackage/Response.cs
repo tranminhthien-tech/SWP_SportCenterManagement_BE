@@ -6,6 +6,7 @@ public class Response
 {
     public class MembershipPackageResponse
     {
+        public List<Guid> CategoryIds { get; set; } = new(); // FIX B46
         public Guid MembershipPackageId { get; set; }
 
         public string PackageName { get; set; } = string.Empty;

@@ -75,10 +75,13 @@ public class ClassBookingService : IClassBookingService
         var localNow = _clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7));
         var today = DateOnly.FromDateTime(localNow.DateTime);
         var currentTime = localNow.TimeOfDay;
-        var hasUnfinishedSession = await _context.ClassSessions.AsNoTracking().AnyAsync(s =>
+        // CODE CŨ: AnyAsync chỉ biết có buổi, không tìm ngày buổi kế tiếp để xét thẻ.
+        // FIX B45: buổi chưa kết thúc sớm nhất, kể cả buổi đang diễn ra.
+        var nextSessionDate = await _context.ClassSessions.AsNoTracking().Where(s =>
             s.ClassId == request.ClassId && !s.IsDeleted &&
-            (s.Date > today || (s.Date == today && s.EndTime > currentTime)));
-        if (!hasUnfinishedSession)
+            (s.Date > today || (s.Date == today && s.EndTime > currentTime)))
+            .OrderBy(s => s.Date).ThenBy(s => s.StartTime).Select(s => (DateOnly?)s.Date).FirstOrDefaultAsync();
+        if (!nextSessionDate.HasValue)
             throw new SWP_SportCenter.Service.Exceptions.BusinessException(
                 "Lớp học chưa có lịch hoặc tất cả buổi học đã kết thúc, không thể đăng ký.");
 
@@ -114,6 +117,12 @@ public class ClassBookingService : IClassBookingService
             throw new SWP_SportCenter.Service.Exceptions.BusinessException("Học viên không tồn tại.");
         }
 
+        // CODE CŨ: ghi booking ngay sau khi kiểm tra học viên, không kiểm tra thẻ.
+        // FIX B45 B46: cùng kiểm tra cho tự đặt và staff đặt hộ; chỉ cần phủ ngày buổi kế tiếp.
+        var eligible = await Membership.MembershipEligibility.FindAsync(_context, request.MemberId, nextSessionDate.Value, classEntity.CategoryId);
+        if (eligible == null)
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Học viên chưa có thẻ thành viên còn hiệu lực cho lớp này.");
+
         // 4. Tiến hành lưu đăng ký
         var newBooking = new Repository.Entity.ClassBooking
         {
@@ -135,6 +144,8 @@ public class ClassBookingService : IClassBookingService
         return new Response.BookingResponse
         {
             Id = savedBooking.Id,
+            EligibleMembershipId = eligible.Id, // FIX B45
+            MembershipEndDate = eligible.EndDate, // FIX B45: FE nhắc gia hạn nếu hết trước cuối lớp.
             MemberId = savedBooking.MemberId,
             MemberName = savedBooking.Member.FullName,
             ClassId = savedBooking.ClassId,

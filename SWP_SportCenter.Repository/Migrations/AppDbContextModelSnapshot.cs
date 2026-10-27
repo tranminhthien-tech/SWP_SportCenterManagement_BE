@@ -332,6 +332,51 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.ToTable("center_manager", (string)null);
                 });
 
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.CheckIn", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CheckInTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MemberId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReceptionistId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RecordedByAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CheckInTime");
+
+                    b.HasIndex("MembershipId");
+
+                    b.HasIndex("ReceptionistId");
+
+                    b.HasIndex("RecordedByAccountId");
+
+                    b.HasIndex("MemberId", "CheckInTime");
+
+                    b.ToTable("check_in", (string)null);
+                });
+
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Class", b =>
                 {
                     b.Property<Guid>("Id")
@@ -810,6 +855,21 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.ToTable("membership_package", (string)null);
                 });
 
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.MembershipPackageCategory", b =>
+                {
+                    b.Property<Guid>("PackageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PackageId", "CategoryId");
+
+                    b.HasIndex("CategoryId");
+
+                    b.ToTable("membership_package_category", (string)null);
+                });
+
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1135,6 +1195,9 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("plan_id");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1145,6 +1208,8 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.HasIndex("MemberId");
 
                     b.HasIndex("PlanId");
+
+                    b.HasIndex("SessionId");
 
                     b.ToTable("training_result", (string)null);
                 });
@@ -1188,6 +1253,40 @@ namespace SWP_SportCenter.Repository.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.CheckIn", b =>
+                {
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Membership", "Membership")
+                        .WithMany()
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Receptionist", "Receptionist")
+                        .WithMany()
+                        .HasForeignKey("ReceptionistId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Account", "RecordedByAccount")
+                        .WithMany()
+                        .HasForeignKey("RecordedByAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Member");
+
+                    b.Navigation("Membership");
+
+                    b.Navigation("Receptionist");
+
+                    b.Navigation("RecordedByAccount");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Class", b =>
@@ -1306,6 +1405,25 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Navigation("Package");
                 });
 
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.MembershipPackageCategory", b =>
+                {
+                    b.HasOne("SWP_SportCenter.Repository.Entity.SportCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.MembershipPackage", "Package")
+                        .WithMany("Categories")
+                        .HasForeignKey("PackageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Package");
+                });
+
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Notification", b =>
                 {
                     b.HasOne("SWP_SportCenter.Repository.Entity.Account", "Account")
@@ -1393,11 +1511,18 @@ namespace SWP_SportCenter.Repository.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SWP_SportCenter.Repository.Entity.ClassSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Coach");
 
                     b.Navigation("Member");
 
                     b.Navigation("Plan");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Account", b =>
@@ -1458,6 +1583,8 @@ namespace SWP_SportCenter.Repository.Migrations
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.MembershipPackage", b =>
                 {
+                    b.Navigation("Categories");
+
                     b.Navigation("Memberships");
                 });
 

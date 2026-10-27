@@ -30,7 +30,9 @@ public class ClassSessionService : IClassSessionService
                 ClassName = cs.Class != null ? cs.Class.ClassName : string.Empty,
                 RoomId = cs.RoomId,
                 RoomName = cs.Room != null ? cs.Room.RoomName : string.Empty,
-                Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+                // CODE CŨ: Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+                // FIX B52: giữ ngày lịch nhưng gắn UTC để JSON có Z, không bị FE hiểu là giờ máy.
+                Date = DateTime.SpecifyKind(cs.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
                 StartTime = cs.StartTime,
                 EndTime = cs.EndTime
             })
@@ -52,7 +54,9 @@ public class ClassSessionService : IClassSessionService
                 ClassName = cs.Class != null ? cs.Class.ClassName : string.Empty,
                 RoomId = cs.RoomId,
                 RoomName = cs.Room != null ? cs.Room.RoomName : string.Empty,
-                Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+                // CODE CŨ: Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+                // FIX B52: thống nhất với danh sách tổng và chi tiết.
+                Date = DateTime.SpecifyKind(cs.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
                 StartTime = cs.StartTime,
                 EndTime = cs.EndTime
             })
@@ -76,7 +80,9 @@ public class ClassSessionService : IClassSessionService
             ClassName = cs.Class != null ? cs.Class.ClassName : string.Empty,
             RoomId = cs.RoomId,
             RoomName = cs.Room != null ? cs.Room.RoomName : string.Empty,
-            Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+            // CODE CŨ: Date = cs.Date.ToDateTime(TimeOnly.MinValue),
+            // FIX B52: response chi tiết và response sau tạo đều có UTC Z.
+            Date = DateTime.SpecifyKind(cs.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
             StartTime = cs.StartTime,
             EndTime = cs.EndTime
         };

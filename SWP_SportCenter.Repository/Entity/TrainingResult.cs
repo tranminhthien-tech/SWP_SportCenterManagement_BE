@@ -4,6 +4,9 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class TrainingResult: BaseEntity, IAuditableEntity
 {
+    // FIX B51: nullable giữ tương thích kết quả cũ không biết buổi học.
+    public Guid? SessionId { get; set; }
+    public ClassSession? Session { get; set; }
     public Guid PlanId { get; set; }
 
     public Guid MemberId { get; set; }

@@ -7,6 +7,36 @@ namespace SWP_SportCenter.Service.TrainingPlan;
 
 public class Service: IService
 {
+    // FIX B49: không loop gọi CreateAsync (mỗi học viên một transaction) như workaround FE.
+    public async Task<List<Response.TrainingPlanResponse>> CreateForClassAsync(Guid classId, Request.ClassTrainingPlanRequest request)
+    {
+        System.ComponentModel.DataAnnotations.Validator.ValidateObject(request,
+            new System.ComponentModel.DataAnnotations.ValidationContext(request), true);
+        var coachId = await GetCurrentCoachIdAsync();
+        var cls = await _dbContext.Classes.AsNoTracking().FirstOrDefaultAsync(c => c.Id == classId && !c.IsDeleted);
+        if (cls == null) throw new KeyNotFoundException("Không tìm thấy lớp học.");
+        if (cls.CoachId != coachId) throw new UnauthorizedAccessException("Bạn chỉ được tạo kế hoạch cho lớp mình dạy.");
+        var ids = await _dbContext.ClassBookings.Where(b => b.ClassId == classId && !b.IsDeleted &&
+                b.Status != Repository.Enum.BookingStatus.Cancelled && !b.Member.IsDeleted && !b.Member.Account.IsDeleted &&
+                b.Member.Account.Role == Repository.Enum.AccountRole.Member && b.Member.Account.Status == Repository.Enum.AccountStatus.Active)
+            .Select(b => b.MemberId).Distinct().ToListAsync();
+        if (ids.Count == 0) throw new ArgumentException("Lớp chưa có học viên đang đăng ký.");
+        var plans = ids.Select(memberId => new Repository.Entity.TrainingPlan {
+            Id = Guid.NewGuid(), ClassId = classId, CoachId = coachId, MemberId = memberId,
+            Title = request.Title.Trim(), ContentDescription = request.ContentDescription,
+            CreatedDate = request.CreatedDate
+        }).ToList();
+        _dbContext.TrainingPlans.AddRange(plans);
+        await _dbContext.SaveChangesAsync(); // một transaction cho cả lớp và audit khi dùng PostgreSQL.
+        var planIds = plans.Select(p => p.Id).ToList();
+        return await _dbContext.TrainingPlans.AsNoTracking().Where(p => planIds.Contains(p.Id))
+            .Select(p => new Response.TrainingPlanResponse {
+                TrainingPlanId = p.Id, CoachId = p.CoachId, MemberId = p.MemberId, ClassId = p.ClassId,
+                CoachName = p.Coach.FullName, MemberName = p.Member.FullName, ClassName = p.Class.ClassName,
+                Title = p.Title, ContentDescription = p.ContentDescription, CreatedDate = p.CreatedDate,
+                CreatedAt = p.CreatedAt, UpdatedAt = p.UpdatedAt
+            }).ToListAsync();
+    }
     private readonly AppDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
 

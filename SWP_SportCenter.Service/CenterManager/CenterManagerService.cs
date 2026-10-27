@@ -22,6 +22,7 @@ public class CenterManagerService : ICenterManagerService
     {
         return await _context.CenterManagers
             .AsNoTracking()
+            .Where(cm => !cm.IsDeleted && !cm.Account.IsDeleted && cm.Account.Role == AccountRole.CenterManager) // FIX B50
             .Select(cm => new Response.CenterManagerResponse
             {
                 Id = cm.Id,
@@ -37,7 +38,9 @@ public class CenterManagerService : ICenterManagerService
     public async Task<Response.CenterManagerResponse?> GetByIdAsync(Guid id)
     {
         // CODE CŨ: không Include Account trước mapping Email.
-        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account).FirstOrDefaultAsync(cm => cm.Id == id); // FIX B22
+        // CODE CŨ: FirstOrDefaultAsync(cm => cm.Id == id)
+        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account)
+            .FirstOrDefaultAsync(cm => cm.Id == id && !cm.IsDeleted && cm.Account.Role == AccountRole.CenterManager); // FIX B50
         if (manager == null) return null;
 
         return MapToResponse(manager);
@@ -46,7 +49,9 @@ public class CenterManagerService : ICenterManagerService
     public async Task<Response.CenterManagerResponse?> GetByAccountIdAsync(Guid accountId)
     {
         // CODE CŨ: không Include Account.
-        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account).FirstOrDefaultAsync(cm => cm.AccountId == accountId); // FIX B22
+        // CODE CŨ: FirstOrDefaultAsync(cm => cm.AccountId == accountId)
+        var manager = await _context.CenterManagers.AsNoTracking().Include(m => m.Account)
+            .FirstOrDefaultAsync(cm => cm.AccountId == accountId && !cm.IsDeleted && cm.Account.Role == AccountRole.CenterManager); // FIX B50
         if (manager == null) return null;
 
         return MapToResponse(manager);

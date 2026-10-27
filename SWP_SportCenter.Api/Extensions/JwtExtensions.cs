@@ -115,7 +115,10 @@ public static class JwtExtensions
                         var accountStatus = await dbContext.Accounts
                             .AsNoTracking()
                             .Where(a => a.Id == accountId && !a.IsDeleted)
-                            .Select(a => (AccountStatus?)a.Status)
+                            // CODE CŨ: chỉ lấy Status nên role trong token cũ không bị thu hồi.
+                            // .Select(a => (AccountStatus?)a.Status)
+                            // FIX B50: đối chiếu cả role hiện tại trong DB.
+                            .Select(a => new { a.Status, a.Role })
                             .FirstOrDefaultAsync(
                                 context.HttpContext.RequestAborted);
 
@@ -125,10 +128,14 @@ public static class JwtExtensions
                             return;
                         }
 
-                        if (accountStatus != AccountStatus.Active)
+                        // CODE CŨ: if (accountStatus != AccountStatus.Active)
+                        if (accountStatus.Status != AccountStatus.Active)
                         {
                             context.Fail("Account is not active.");
                         }
+                        // FIX B50: chuyển role phải đăng nhập lại để lấy quyền mới.
+                        if (context.Principal?.FindFirstValue(ClaimTypes.Role) != accountStatus.Role.ToString())
+                            context.Fail("Account role changed. Please sign in again.");
                     }
                 };
             });

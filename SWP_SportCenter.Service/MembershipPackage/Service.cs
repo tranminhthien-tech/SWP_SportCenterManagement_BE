@@ -41,6 +41,7 @@ public class Service: IService
             new Response.MembershipPackageResponse
             {
                 MembershipPackageId = x.Id,
+                CategoryIds = x.Categories.Select(c => c.CategoryId).ToList(), // FIX B46
                 PackageName = x.PackageName,
                 Description = x.Description,
                 DurationDays = x.DurationDays,
@@ -74,6 +75,7 @@ public class Service: IService
             .Select(x => new Response.MembershipPackageResponse
             {
                 MembershipPackageId = x.Id,
+                CategoryIds = x.Categories.Select(c => c.CategoryId).ToList(), // FIX B46
                 PackageName = x.PackageName,
                 Description = x.Description,
                 DurationDays = x.DurationDays,
@@ -110,6 +112,8 @@ public class Service: IService
                 "Price cannot be negative.");
         }
 
+        // FIX B46: kiểm tra toàn bộ ID trước khi lưu, loại trùng.
+        var categoryIds = await ValidateCategoriesAsync(request.CategoryIds);
         var package = new Repository.Entity.MembershipPackage
         {
             Id = Guid.NewGuid(),
@@ -118,6 +122,7 @@ public class Service: IService
             DurationDays = request.DurationDays,
             Price = request.Price,
             Status = request.Status,
+            Categories = categoryIds.Select(id => new Repository.Entity.MembershipPackageCategory { CategoryId = id }).ToList(), // FIX B46
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -127,6 +132,7 @@ public class Service: IService
         var result = new Response.MembershipPackageResponse
         {
             MembershipPackageId = package.Id,
+            CategoryIds = categoryIds, // FIX B46
             PackageName = package.PackageName,
             Description = package.Description,
             DurationDays = package.DurationDays,
@@ -171,6 +177,15 @@ public class Service: IService
             return false;
         }
 
+        // FIX B46: null giữ phạm vi cũ, [] chủ động chuyển sang dùng mọi môn.
+        if (request.CategoryIds != null)
+        {
+            var ids = await ValidateCategoriesAsync(request.CategoryIds);
+            await _dbContext.Entry(package).Collection(x => x.Categories).LoadAsync();
+            _dbContext.RemoveRange(package.Categories.Where(x => !ids.Contains(x.CategoryId)).ToList());
+            foreach (var categoryId in ids.Except(package.Categories.Select(x => x.CategoryId)))
+                package.Categories.Add(new Repository.Entity.MembershipPackageCategory { CategoryId = categoryId });
+        }
         package.PackageName = request.PackageName.Trim();
         package.Description = request.Description;
         package.DurationDays = request.DurationDays;
@@ -181,6 +196,15 @@ public class Service: IService
         await _dbContext.SaveChangesAsync();
 
         return true;
+    }
+
+    // FIX B46: không suy luận môn từ tên/mô tả gói.
+    private async Task<List<Guid>> ValidateCategoriesAsync(List<Guid>? supplied)
+    {
+        var ids = supplied?.Distinct().ToList() ?? new List<Guid>();
+        if (ids.Contains(Guid.Empty) || await _dbContext.SportCategories.CountAsync(c => ids.Contains(c.Id) && !c.IsDeleted) != ids.Count)
+            throw new ArgumentException("Danh sách môn của gói có môn không tồn tại.");
+        return ids;
     }
 
     // DELETE: api/membership-packages/{id}

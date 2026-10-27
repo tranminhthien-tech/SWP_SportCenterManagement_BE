@@ -9,6 +9,13 @@ namespace SWP_SportCenter.Controllers;
 [Route("api")]
 public class TrainingPlanController : ControllerBase
 {
+    // FIX B49: route tạo kế hoạch cả lớp chỉ cho Coach; Service kiểm tra owner.
+    [HttpPost("training-plans/class/{classId:guid}"), Authorize(Policy = JwtExtensions.CoachPolicy)]
+    public async Task<IActionResult> CreateForClass(Guid classId, Request.ClassTrainingPlanRequest request)
+    {
+        var rows = await _service.CreateForClassAsync(classId, request);
+        return Ok(new { createdCount = rows.Count, data = rows });
+    }
     private readonly IService _service;
 
     public TrainingPlanController(IService service)
