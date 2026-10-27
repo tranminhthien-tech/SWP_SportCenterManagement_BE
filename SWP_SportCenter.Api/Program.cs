@@ -45,6 +45,7 @@ if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Default
 // FIX B19: áp dụng giới hạn phân trang cho mọi action có pageSize/pageIndex.
 builder.Services.AddControllers(o => o.Filters.Add<SWP_SportCenter.Filters.PaginationFilter>());
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<SWP_SportCenter.Service.CheckIns.CheckInService>(); // FIX B47
 // FIX B39: hủy giao dịch online quá hạn, giữ dữ liệu lịch sử.
 builder.Services.AddScoped<SWP_SportCenter.Service.Payment.PaymentExpirationService>();
 builder.Services.AddHostedService<SWP_SportCenter.Infrastructure.PaymentExpirationWorker>();

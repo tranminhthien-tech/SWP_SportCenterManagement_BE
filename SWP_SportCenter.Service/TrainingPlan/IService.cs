@@ -2,6 +2,8 @@ namespace SWP_SportCenter.Service.TrainingPlan;
 
 public interface IService
 {
+    // FIX B49: một lần lưu cho toàn bộ học viên đang đặt lớp mình dạy.
+    Task<List<Response.TrainingPlanResponse>> CreateForClassAsync(Guid classId, Request.ClassTrainingPlanRequest request);
     // GET: /api/training-plans/{id}
     // Lấy chi tiết kế hoạch
     public Task<Response.TrainingPlanResponse?> GetByIdAsync(Guid id);

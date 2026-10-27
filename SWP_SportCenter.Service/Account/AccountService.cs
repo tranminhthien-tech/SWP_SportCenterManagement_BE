@@ -11,10 +11,13 @@ namespace SWP_SportCenter.Service.Accounts;
 public class AccountService : IAccountService
 {
     private readonly AppDbContext _dbContext;
+    private readonly Security.CurrentActor _actor; // FIX B50
 
-    public AccountService(AppDbContext dbContext)
+    // CODE CŨ: public AccountService(AppDbContext dbContext)
+    public AccountService(AppDbContext dbContext, Security.CurrentActor actor)
     {
         _dbContext = dbContext;
+        _actor = actor;
     }
 
     public async Task<Base.Response.PageResult<Response.AccountResponse>> GetAllAsync(
@@ -57,10 +60,14 @@ public class AccountService : IAccountService
         if (hasProfile.HasValue)
         {
             query = query.Where(a => (
-                (a.Role == AccountRole.Member && a.Member != null) ||
-                (a.Role == AccountRole.Coach && a.Coach != null) ||
-                (a.Role == AccountRole.Receptionist && a.Receptionist != null) ||
-                (a.Role == AccountRole.CenterManager && a.CenterManager != null)
+                // CODE CŨ: (a.Role == AccountRole.Member && a.Member != null) ||
+                (a.Role == AccountRole.Member && a.Member != null && !a.Member.IsDeleted) || // FIX B50
+                // CODE CŨ: (a.Role == AccountRole.Coach && a.Coach != null) ||
+                (a.Role == AccountRole.Coach && a.Coach != null && !a.Coach.IsDeleted) || // FIX B50
+                // CODE CŨ: (a.Role == AccountRole.Receptionist && a.Receptionist != null) ||
+                (a.Role == AccountRole.Receptionist && a.Receptionist != null && !a.Receptionist.IsDeleted) || // FIX B50
+                // CODE CŨ: (a.Role == AccountRole.CenterManager && a.CenterManager != null)
+                (a.Role == AccountRole.CenterManager && a.CenterManager != null && !a.CenterManager.IsDeleted) // FIX B50
             ) == hasProfile.Value);
         }
 
@@ -75,10 +82,14 @@ public class AccountService : IAccountService
                 Username = account.Username,
                 // FIX: trạng thái hồ sơ phục vụ danh sách/dropdown.
                 HasProfile =
-                    (account.Role == AccountRole.Member && account.Member != null) ||
-                    (account.Role == AccountRole.Coach && account.Coach != null) ||
-                    (account.Role == AccountRole.Receptionist && account.Receptionist != null) ||
-                    (account.Role == AccountRole.CenterManager && account.CenterManager != null),
+                    // CODE CŨ: (account.Role == AccountRole.Member && account.Member != null) ||
+                    (account.Role == AccountRole.Member && account.Member != null && !account.Member.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.Coach && account.Coach != null) ||
+                    (account.Role == AccountRole.Coach && account.Coach != null && !account.Coach.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.Receptionist && account.Receptionist != null) ||
+                    (account.Role == AccountRole.Receptionist && account.Receptionist != null && !account.Receptionist.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.CenterManager && account.CenterManager != null),
+                    (account.Role == AccountRole.CenterManager && account.CenterManager != null && !account.CenterManager.IsDeleted), // FIX B50
 
                 // CODE CŨ: lấy FullName từ profile, trả rỗng khi profile bị xóa.
                 // FIX: đọc bản thông tin cá nhân độc lập trong Account.
@@ -117,10 +128,14 @@ public class AccountService : IAccountService
                 Username = account.Username,
                 // FIX: GET chi tiết cũng phản ánh trạng thái hồ sơ.
                 HasProfile =
-                    (account.Role == AccountRole.Member && account.Member != null) ||
-                    (account.Role == AccountRole.Coach && account.Coach != null) ||
-                    (account.Role == AccountRole.Receptionist && account.Receptionist != null) ||
-                    (account.Role == AccountRole.CenterManager && account.CenterManager != null),
+                    // CODE CŨ: (account.Role == AccountRole.Member && account.Member != null) ||
+                    (account.Role == AccountRole.Member && account.Member != null && !account.Member.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.Coach && account.Coach != null) ||
+                    (account.Role == AccountRole.Coach && account.Coach != null && !account.Coach.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.Receptionist && account.Receptionist != null) ||
+                    (account.Role == AccountRole.Receptionist && account.Receptionist != null && !account.Receptionist.IsDeleted) || // FIX B50
+                    // CODE CŨ: (account.Role == AccountRole.CenterManager && account.CenterManager != null),
+                    (account.Role == AccountRole.CenterManager && account.CenterManager != null && !account.CenterManager.IsDeleted), // FIX B50
 
                 // CODE CŨ: đọc tên từ profile liên kết.
                 // FIX: thống nhất GET chi tiết với GET danh sách.
@@ -199,6 +214,17 @@ public class AccountService : IAccountService
             return false;
         }
 
+        // FIX B50: Manager trong token VÀ DB; không tự chuyển role.
+        var targetRole = request.Role ?? account.Role;
+        if (!System.Enum.IsDefined(targetRole)) throw new ArgumentException("Role không hợp lệ.");
+        var changingRole = targetRole != account.Role;
+        if (changingRole)
+        {
+            if (!_actor.IsManager || !await _dbContext.Accounts.AnyAsync(a => a.Id == _actor.AccountId &&
+                    !a.IsDeleted && a.Status == AccountStatus.Active && a.Role == AccountRole.CenterManager))
+                throw new UnauthorizedAccessException("Chỉ Manager được thay đổi vai trò tài khoản.");
+            if (_actor.AccountId == account.Id) throw new UnauthorizedAccessException("Không được tự thay đổi vai trò của mình.");
+        }
         // Validate input
         var username = request.Username.Trim();
         var email = request.Email.Trim();
@@ -219,7 +245,8 @@ public class AccountService : IAccountService
 
         // FIX 2026-10-22: FullName bắt buộc để phone luôn được cập nhật cùng profile.
         // FIX: cho phép sửa tài khoản nhân sự chưa có profile mà không cần tên/phone.
-        var needsProfileDetails = account.Role == AccountRole.Member || account.Coach != null ||
+        // CODE CŨ: chỉ xét role/profile hiện tại.
+        var needsProfileDetails = changingRole || account.Role == AccountRole.Member || account.Coach != null ||
             account.Receptionist != null || account.CenterManager != null;
         // CODE CŨ: if (string.IsNullOrWhiteSpace(fullName))
         if (needsProfileDetails && string.IsNullOrWhiteSpace(fullName))
@@ -267,7 +294,8 @@ public class AccountService : IAccountService
         }
 
         // FIX 2026-10-22: mỗi bảng profile có unique index cho phone.
-        var phoneExists = needsProfileDetails && (account.Role switch
+        // CODE CŨ: kiểm tra phone theo account.Role cũ.
+        var phoneExists = needsProfileDetails && (targetRole switch
         {
             AccountRole.Member => await _dbContext.Members.AnyAsync(x =>
                 x.AccountId != id && x.Phone == phone),
@@ -287,6 +315,8 @@ public class AccountService : IAccountService
             throw new SWP_SportCenter.Service.Exceptions.ConflictException("Phone đã được sử dụng.");
         }
 
+        // FIX B50: profile cũ xóa mềm, profile mới tạo/khôi phục cùng SaveChanges.
+        if (changingRole) ChangeRoleProfile(account, targetRole);
         // Update account information
         account.Username = username;
         account.Email = email;
@@ -384,6 +414,39 @@ public class AccountService : IAccountService
         return true;
     }
 
+
+    // FIX B50: chỉ dùng khi chuyển role; CreateAsync vẫn giữ hai bước theo B26.
+    private void ChangeRoleProfile(Repository.Entity.Account account, AccountRole role)
+    {
+        if (account.Member != null) account.Member.IsDeleted = true;
+        if (account.Coach != null) account.Coach.IsDeleted = true;
+        if (account.Receptionist != null) account.Receptionist.IsDeleted = true;
+        if (account.CenterManager != null) account.CenterManager.IsDeleted = true;
+        account.Role = role;
+        switch (role)
+        {
+            case AccountRole.Member:
+                account.Member ??= new Repository.Entity.Member { Id = Guid.NewGuid(), AccountId = account.Id,
+                    Gender = string.Empty, Avatar = string.Empty, TrainingGoal = string.Empty };
+                account.Member.IsDeleted = false; break;
+            case AccountRole.Coach:
+                account.Coach ??= new Repository.Entity.Coach { Id = Guid.NewGuid(), AccountId = account.Id,
+                    Avatar = string.Empty, Specialization = string.Empty };
+                account.Coach.IsDeleted = false; break;
+            case AccountRole.Receptionist:
+                account.Receptionist ??= new Repository.Entity.Receptionist { Id = Guid.NewGuid(), AccountId = account.Id };
+                account.Receptionist.IsDeleted = false; break;
+            case AccountRole.CenterManager:
+                account.CenterManager ??= new Repository.Entity.CenterManager { Id = Guid.NewGuid(), AccountId = account.Id };
+                account.CenterManager.IsDeleted = false; break;
+        }
+        // FIX B50: Guid đã cấp sẵn phải Add tường minh để EF không nhận profile mới là Modified.
+        Repository.Abstraction.BaseEntity? destination = role switch {
+            AccountRole.Member => account.Member, AccountRole.Coach => account.Coach,
+            AccountRole.Receptionist => account.Receptionist, AccountRole.CenterManager => account.CenterManager, _ => null
+        };
+        if (destination != null && _dbContext.Entry(destination).State == EntityState.Detached) _dbContext.Add(destination);
+    }
 
     public async Task<bool> SoftDeleteAsync(Guid id)
     {

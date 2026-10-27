@@ -21,6 +21,7 @@ public class Service:IService
             .Skip((pageIndex - 1) * pageSize).Take(pageSize)
             .Select(x => new Response.TrainingResultResponse {
                 TrainingResultId = x.Id, PlanId = x.PlanId, PlanTitle = x.Plan.Title,
+                SessionId = x.SessionId, // FIX B51
                 MemberId = x.MemberId, MemberName = x.Member.FullName,
                 CoachId = x.CoachId, CoachName = x.Coach.FullName,
                 PerformanceScore = x.PerformanceScore, CoachComment = x.CoachComment,
@@ -97,6 +98,7 @@ public class Service:IService
         return new Response.TrainingResultResponse
         {
             TrainingResultId = trainingResult.Id,
+            SessionId = trainingResult.SessionId, // FIX B51
             PlanId = trainingResult.PlanId,
             // FIX B13: trả tên cùng kết quả.
             MemberName = trainingResult.Member.FullName,
@@ -122,6 +124,7 @@ public class Service:IService
             .Select(x => new Response.TrainingResultResponse
             {
                 TrainingResultId = x.Id,
+                SessionId = x.SessionId, // FIX B51
                 PlanId = x.PlanId,
                 // FIX B13: trả tên cùng kết quả.
                 MemberName = x.Member.FullName,
@@ -179,6 +182,7 @@ public class Service:IService
             .Select(x => new Response.TrainingResultResponse
             {
                 TrainingResultId = x.Id,
+                SessionId = x.SessionId, // FIX B51
                 PlanId = x.PlanId,
                 // FIX B13: trả tên cùng kết quả.
                 MemberName = x.Member.FullName,
@@ -256,6 +260,7 @@ public class Service:IService
             .Select(x => new Response.TrainingResultResponse
             {
                 TrainingResultId = x.Id,
+                SessionId = x.SessionId, // FIX B51
                 PlanId = x.PlanId,
                 // FIX B13: trả tên cùng kết quả.
                 MemberName = x.Member.FullName,
@@ -318,8 +323,11 @@ public class Service:IService
                 "Member does not belong to this training plan");
         }
 
+        // FIX B51: xác thực Session và Attendance trước khi ghi bất kỳ thay đổi nào.
+        await ValidateSessionAsync(request.SessionId, trainingPlan.ClassId, trainingPlan.MemberId);
         var trainingResult = new Repository.Entity.TrainingResult
         {
+            SessionId = request.SessionId, // FIX B51
             Id = Guid.NewGuid(),
             PlanId = trainingPlan.Id,
             MemberId = trainingPlan.MemberId,
@@ -394,6 +402,10 @@ public class Service:IService
                 "Coach comment is required");
         }
 
+        // CODE CŨ: cập nhật kết quả chỉ dựa trên Plan, không liên kết/kiểm tra buổi học.
+        // FIX B51: null cho kết quả chung; có ID thì bắt buộc đúng lớp và đã có mặt.
+        await ValidateSessionAsync(request.SessionId, trainingPlan.ClassId, trainingPlan.MemberId);
+        trainingResult.SessionId = request.SessionId;
         trainingResult.PlanId = trainingPlan.Id;
         trainingResult.MemberId = trainingPlan.MemberId;
         trainingResult.CoachId = coachId;
@@ -405,6 +417,17 @@ public class Service:IService
         await _dbContext.SaveChangesAsync();
 
         return true;
+    }
+
+    // FIX B51: Late cũng là đã có mặt, Absent/không có Attendance không được chấm cho buổi đó.
+    private async Task ValidateSessionAsync(Guid? sessionId, Guid classId, Guid memberId)
+    {
+        if (!sessionId.HasValue) return;
+        if (!await _dbContext.ClassSessions.AnyAsync(s => s.Id == sessionId.Value && s.ClassId == classId && !s.IsDeleted))
+            throw new ArgumentException("Buổi học không tồn tại hoặc không thuộc lớp của kế hoạch.");
+        if (!await _dbContext.Attendances.AnyAsync(a => a.SessionId == sessionId.Value && a.MemberId == memberId && !a.IsDeleted &&
+                (a.Status == Repository.Enum.AttendanceStatus.Present || a.Status == Repository.Enum.AttendanceStatus.Late)))
+            throw new ArgumentException("Học viên chưa được điểm danh có mặt trong buổi học này.");
     }
 
     // DELETE: /api/training-results/{id}

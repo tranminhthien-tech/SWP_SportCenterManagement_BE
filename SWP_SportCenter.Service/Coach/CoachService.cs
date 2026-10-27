@@ -22,6 +22,7 @@ public class CoachService : ICoachService
     {
         return await _context.Coaches
             .AsNoTracking()
+            .Where(c => !c.IsDeleted && !c.Account.IsDeleted && c.Account.Role == AccountRole.Coach) // FIX B50
             .Select(c => new Response.CoachResponse
             {
                 Id = c.Id,
@@ -44,7 +45,8 @@ public class CoachService : ICoachService
         // FIX B25 2026-10-23: MapToResponse đọc Account.Email nên phải tải Account cùng Coach.
         var coach = await _context.Coaches.AsNoTracking()
             .Include(c => c.Account)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            // CODE CŨ: chỉ lọc Id, vẫn trả hồ sơ của role cũ sau khi chuyển quyền.
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted && c.Account.Role == AccountRole.Coach); // FIX B50
         if (coach == null) return null;
 
         return MapToResponse(coach);
@@ -56,7 +58,8 @@ public class CoachService : ICoachService
         // FIX B25 2026-10-23: các route /me, /me/classes, /me/members cần cả Account để map response.
         var coach = await _context.Coaches.AsNoTracking()
             .Include(c => c.Account)
-            .FirstOrDefaultAsync(c => c.AccountId == accountId);
+            // CODE CŨ: chỉ lọc AccountId.
+            .FirstOrDefaultAsync(c => c.AccountId == accountId && !c.IsDeleted && c.Account.Role == AccountRole.Coach); // FIX B50
         if (coach == null) return null;
 
         return MapToResponse(coach);

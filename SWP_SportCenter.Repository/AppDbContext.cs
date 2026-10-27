@@ -44,6 +44,9 @@ public class AppDbContext: DbContext
         foreach (var entry in ChangeTracker.Entries().Where(e =>
                      e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).ToList())
         {
+            // FIX B50: hồ sơ xóa mềm chỉ giữ lịch sử, không ghi đè liên hệ của role mới.
+            // CODE CŨ: mọi profile Modified đều đồng bộ tên/phone kể cả IsDeleted = true.
+            if (entry.Entity is BaseEntity { IsDeleted: true }) continue;
             var contact = entry.Entity switch
             {
                 Member m => (m.AccountId, m.Account, m.FullName, m.Phone),
@@ -134,6 +137,25 @@ public class AppDbContext: DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        // FIX B51: giữ buổi đang được kết quả tham chiếu, không xóa dây chuyền lịch sử.
+        modelBuilder.Entity<TrainingResult>().HasOne(r => r.Session).WithMany()
+            .HasForeignKey(r => r.SessionId).OnDelete(DeleteBehavior.Restrict);
+        // FIX B47: FK lịch sử check-in không bị xóa theo hồ sơ.
+        modelBuilder.Entity<CheckIn>(b => {
+            b.ToTable("check_in"); b.HasKey(x => x.Id);
+            b.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.Receptionist).WithMany().HasForeignKey(x => x.ReceptionistId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.RecordedByAccount).WithMany().HasForeignKey(x => x.RecordedByAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.MemberId, x.CheckInTime }); b.HasIndex(x => x.CheckInTime);
+        });
+        // FIX B46: unique cặp Package/Category, giữ category đang được gói tham chiếu.
+        modelBuilder.Entity<MembershipPackageCategory>(b => {
+            b.ToTable("membership_package_category");
+            b.HasKey(x => new { x.PackageId, x.CategoryId });
+            b.HasOne(x => x.Package).WithMany(x => x.Categories).HasForeignKey(x => x.PackageId).OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        });
         // FIX B31: khóa ngoại Restrict bảo toàn lịch sử; index phục vụ lọc theo member/trạng thái.
         modelBuilder.Entity<SupportRequest>(b => {
             b.ToTable("support_request");

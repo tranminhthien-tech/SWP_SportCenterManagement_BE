@@ -4,6 +4,7 @@ public class Response
 {
     public class TrainingResultResponse
     {
+        public Guid? SessionId { get; set; } // FIX B51
         public Guid TrainingResultId { get; set; }
 
         public Guid PlanId { get; set; }

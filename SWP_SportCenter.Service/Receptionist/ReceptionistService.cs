@@ -27,6 +27,7 @@ public class ReceptionistService : IReceptionistService
     {
         return await _context.Receptionists
             .AsNoTracking()
+            .Where(r => !r.IsDeleted && !r.Account.IsDeleted && r.Account.Role == AccountRole.Receptionist) // FIX B50
             .Include(r => r.Account)
             .OrderBy(r => r.FullName)
             .Select(r => new Response.ReceptionistResponse
@@ -57,7 +58,8 @@ public class ReceptionistService : IReceptionistService
         return await _context.Receptionists
             .AsNoTracking()
             .Include(r => r.Account)
-            .Where(r => r.Id == id)
+            // CODE CŨ: .Where(r => r.Id == id)
+            .Where(r => r.Id == id && !r.IsDeleted && r.Account.Role == AccountRole.Receptionist) // FIX B50
             .Select(r => new Response.ReceptionistResponse
             {
                 Id = r.Id,
@@ -86,7 +88,8 @@ public class ReceptionistService : IReceptionistService
         return await _context.Receptionists
             .AsNoTracking()
             .Include(r => r.Account)
-            .Where(r => r.AccountId == accountId)
+            // CODE CŨ: .Where(r => r.AccountId == accountId)
+            .Where(r => r.AccountId == accountId && !r.IsDeleted && r.Account.Role == AccountRole.Receptionist) // FIX B50
             .Select(r => new Response.ReceptionistResponse
             {
                 Id = r.Id,

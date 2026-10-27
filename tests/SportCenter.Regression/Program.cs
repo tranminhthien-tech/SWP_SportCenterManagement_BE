@@ -25,11 +25,12 @@ builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> {
 });
 // One shared store for all scopes.
 var store = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
+var workflowSaves = new WorkflowSaveCounter(); // FIX B49: đếm lần lưu thật trong request batch.
 // CODE CŨ: DbContext test không có audit interceptor.
 // FIX B33: kiểm tra cùng interceptor với server thật.
 builder.Services.AddScoped<SWP_SportCenter.Infrastructure.ServerAuditInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((sp, o) => o.UseInMemoryDatabase("regression", store)
-    .AddInterceptors(sp.GetRequiredService<SWP_SportCenter.Infrastructure.ServerAuditInterceptor>()));
+    .AddInterceptors(sp.GetRequiredService<SWP_SportCenter.Infrastructure.ServerAuditInterceptor>(), workflowSaves));
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentActor>();
 // FIX B23: cố định 23:30 ngày 23/10 tại Việt Nam (16:30 UTC) để bắt lỗi lệch ngày/timezone.
@@ -70,6 +71,7 @@ builder.Services.AddScoped<SWP_SportCenter.Service.MediaService.IService, TestMe
 builder.Services.AddScoped<SWP_SportCenter.Service.Receptionist.IReceptionistService, SWP_SportCenter.Service.Receptionist.ReceptionistService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.CenterManager.ICenterManagerService, SWP_SportCenter.Service.CenterManager.CenterManagerService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Payment.PaymentExpirationService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.CheckIns.CheckInService>(); // FIX B47
 var app = builder.Build();
 app.UseMiddleware<SWP_SportCenter.Middleware.ApiExceptionMiddleware>();
 app.UseSwaggerAPI(); // FIX B22
@@ -105,6 +107,12 @@ var trainingResult = new TrainingResult { Id = Guid.NewGuid(), Coach = coach, Me
 using (var scope = app.Services.CreateScope()) {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.AddRange(member, other, coach, receptionist, manager, cls, session, membership, plan, trainingResult); await db.SaveChangesAsync();
+    // FIX B45: fixture booking độc lập với thẻ đang được các test cancel/renew/delete.
+    db.Memberships.AddRange(new Membership { Id = Guid.NewGuid(), MemberId = member.Id, PackageId = package.Id,
+        StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc), Status = MembershipStatus.Active },
+        new Membership { Id = Guid.NewGuid(), MemberId = other.Id, PackageId = package.Id,
+        StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Utc), Status = MembershipStatus.Active });
+    await db.SaveChangesAsync();
 }
 Login(memberAccount);
 var profileResponse = await http.GetAsync("/api/members/me");
@@ -596,6 +604,221 @@ using (var formNoImage = new MultipartFormDataContent()) {
         (await Json(await http.GetAsync($"/api/center-managers/{managerProfileId}"))).GetProperty("avatar").GetString() == TestMedia.Url,
         "B22 multipart without new file preserves existing URL");
 }
+// FIX B52: kiểm tra chuỗi JSON thật trên mọi đường trả ngày Session/Attendance.
+var b52Date = new DateOnly(2026, 10, 15);
+var b52Room = new Room { Id = Guid.NewGuid(), RoomName = "B52 Room", Capacity = 20, Status = RoomStatus.Available };
+var b52Class = new Class { Id = Guid.NewGuid(), ClassName = "B52 Class", CoachId = coach.Id,
+    CategoryId = category.Id, MaxCapacity = 20, Status = ClassStatus.Ongoing,
+    StartDate = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+    EndDate = new DateTime(2026, 10, 31, 0, 0, 0, DateTimeKind.Utc) };
+var b52Session = new ClassSession { Id = Guid.NewGuid(), Class = b52Class, Room = b52Room,
+    Date = b52Date, StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(9) };
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.AddRange(b52Session, new ClassBooking { Id = Guid.NewGuid(), Class = b52Class,
+        MemberId = member.Id, Status = BookingStatus.Booked });
+    await db.SaveChangesAsync();
+}
+void CheckB52(JsonElement row, string field, string route) {
+    Check(row.GetProperty(field).GetString() == "2026-10-15T00:00:00Z" &&
+        row.GetProperty(field).GetDateTime().Kind == DateTimeKind.Utc, "B52 explicit UTC calendar date " + route);
+}
+http.DefaultRequestHeaders.Authorization = null;
+CheckB52((await Json(await http.GetAsync("/api/class-sessions"))).EnumerateArray()
+    .Single(x => x.GetProperty("id").GetGuid() == b52Session.Id), "date", "all sessions");
+CheckB52((await Json(await http.GetAsync($"/api/class-sessions/class/{b52Class.Id}")))[0], "date", "sessions by class");
+CheckB52(await Json(await http.GetAsync($"/api/class-sessions/{b52Session.Id}")), "date", "session detail");
+Login(coachAccount);
+var b52Recorded = await http.PostAsJsonAsync("/api/attendances", new { sessionId = b52Session.Id, memberId = member.Id, status = 1 });
+Check(b52Recorded.IsSuccessStatusCode, "B52 record attendance fixture");
+CheckB52(await Json(b52Recorded), "sessionDate", "record attendance response");
+CheckB52((await Json(await http.GetAsync($"/api/attendances/session/{b52Session.Id}")))[0], "sessionDate", "attendance by session");
+Login(memberAccount);
+CheckB52((await Json(await http.GetAsync("/api/members/me/attendances"))).EnumerateArray()
+    .Single(x => x.GetProperty("sessionId").GetGuid() == b52Session.Id), "sessionDate", "member attendance history");
+using (var scope = app.Services.CreateScope()) {
+    Check((await scope.ServiceProvider.GetRequiredService<AppDbContext>().ClassSessions.FindAsync(b52Session.Id))!.Date == b52Date,
+        "B52 stored DateOnly unchanged");
+}
+using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string>())) {
+    // FIX B52: provider PostgreSQL có thể biên dịch projection, không cần kết nối DB.
+    var sql = schema.ClassSessions.Select(cs => new {
+        cs.Id, Date = DateTime.SpecifyKind(cs.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+    }).ToQueryString();
+    Check(sql.Contains("class_session"), "B52 PostgreSQL date projection compiles");
+}
+// FIX B45 B46 B47: dữ liệu riêng, không phụ thuộc các thẻ đã cancel/renew trong test cũ.
+var wfAccount = Account(AccountRole.Member, "workflow_member");
+var wfMember = new Member { Id = Guid.NewGuid(), Account = wfAccount, FullName = "Workflow", Phone = "0990000001" };
+var wfClass = new Class { Id = Guid.NewGuid(), ClassName = "Workflow class", CategoryId = category.Id, CoachId = coach.Id,
+    MaxCapacity = 20, StartDate = new DateTime(2026,10,1,0,0,0,DateTimeKind.Utc), EndDate = new DateTime(2026,12,1,0,0,0,DateTimeKind.Utc) };
+var wfSession = new ClassSession { Id = Guid.NewGuid(), ClassId = wfClass.Id, Date = new DateOnly(2026,10,24), StartTime = TimeSpan.FromHours(8), EndTime = TimeSpan.FromHours(9) };
+var wfCardId = Guid.NewGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.AddRange(wfMember, wfClass, wfSession); await db.SaveChangesAsync();
+}
+Login(wfAccount);
+Check((await http.PostAsJsonAsync("/api/class-bookings", new { memberId = wfMember.Id, classId = wfClass.Id })).StatusCode == HttpStatusCode.BadRequest, "B45 member without card cannot book");
+Login(receptionistAccount);
+Check((await http.PostAsJsonAsync("/api/class-bookings", new { memberId = wfMember.Id, classId = wfClass.Id })).StatusCode == HttpStatusCode.BadRequest, "B45 receptionist cannot bypass card");
+Check((await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id })).StatusCode == HttpStatusCode.BadRequest, "B47 no card cannot check in");
+Login(manager);
+var wfPackageHttp = await http.PostAsJsonAsync("/api/membership-packages", new { packageName = "Restricted", description = "Fitness only", durationDays = 30, price = 100, status = 1, categoryIds = new[] { category.Id, category.Id } });
+Check(wfPackageHttp.IsSuccessStatusCode, "B46 create category-restricted package");
+var wfPackageJson = await Json(wfPackageHttp); var wfPackageId = wfPackageJson.GetProperty("membershipPackageId").GetGuid();
+Check(wfPackageJson.GetProperty("categoryIds").GetArrayLength() == 1, "B46 category IDs deduplicated");
+Check((await http.PostAsJsonAsync("/api/membership-packages", new { packageName = "Invalid categories", durationDays = 1, status = 1, categoryIds = new[] { Guid.NewGuid() } })).StatusCode == HttpStatusCode.BadRequest, "B46 missing category rejected");
+var wfWrongCategory = new SportCategory { Id = Guid.NewGuid(), CategoryName = "Wrong sport" };
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Add(wfWrongCategory); db.Memberships.Add(new Membership { Id = wfCardId, MemberId = wfMember.Id, PackageId = wfPackageId, Status = MembershipStatus.Active,
+        StartDate = new DateTime(2026,10,1,0,0,0,DateTimeKind.Utc), EndDate = new DateTime(2026,10,23,0,0,0,DateTimeKind.Utc) }); await db.SaveChangesAsync();
+}
+Login(receptionistAccount);
+Check((await http.PostAsJsonAsync("/api/class-bookings", new { memberId = wfMember.Id, classId = wfClass.Id })).StatusCode == HttpStatusCode.BadRequest, "B45 card must cover next session not just today");
+var wfIn = await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id });
+Check(wfIn.StatusCode == HttpStatusCode.Created && (await Json(wfIn)).GetProperty("daysRemaining").GetInt32() == 0, "B47 card valid on entire final local day");
+Check((await Json(wfIn)).GetProperty("receptionistId").GetGuid() == receptionist.Id && (await Json(wfIn)).GetProperty("recordedByAccountId").GetGuid() == receptionistAccount.Id, "B47 check-in actor from token");
+Check((await Json(await http.GetAsync("/api/check-ins?date=2026-10-23"))).GetProperty("totalItems").GetInt32() == 1, "B47 filter local day");
+Check((await Json(await http.GetAsync("/api/check-ins?date=2026-10-24"))).GetProperty("totalItems").GetInt32() == 0, "B47 exclude next day");
+// FIX B45 B47: thẻ inactive/cancelled/xóa mềm/chưa bắt đầu/hết hạn đều không được sử dụng.
+foreach (var invalidCard in new[] { "inactive", "cancelled", "deleted", "future", "expired" }) {
+    using (var scope = app.Services.CreateScope()) {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var card = (await db.Memberships.FindAsync(wfCardId))!;
+        card.Status = invalidCard == "inactive" ? MembershipStatus.Inactive : invalidCard == "cancelled" ? MembershipStatus.Cancelled : MembershipStatus.Active;
+        card.IsDeleted = invalidCard == "deleted";
+        card.StartDate = new DateTime(2026,10,invalidCard == "future" ? 25 : 1,0,0,0,DateTimeKind.Utc);
+        card.EndDate = new DateTime(2026,10,invalidCard == "expired" ? 22 : 24,0,0,0,DateTimeKind.Utc);
+        await db.SaveChangesAsync();
+    }
+    Check((await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id })).StatusCode == HttpStatusCode.BadRequest, "B47 reject card " + invalidCard);
+    Check((await http.PostAsJsonAsync("/api/class-bookings", new { memberId = wfMember.Id, classId = wfClass.Id })).StatusCode == HttpStatusCode.BadRequest, "B45 reject card " + invalidCard);
+}
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var card = (await db.Memberships.FindAsync(wfCardId))!;
+    card.Status = MembershipStatus.Active; card.IsDeleted = false;
+    card.StartDate = new DateTime(2026,10,1,0,0,0,DateTimeKind.Utc); card.EndDate = new DateTime(2026,10,24,0,0,0,DateTimeKind.Utc); await db.SaveChangesAsync();
+}
+Login(wfAccount);
+Check((await Json(await http.GetAsync("/api/members/me/check-ins"))).GetProperty("totalItems").GetInt32() == 1, "B47 member sees own history");
+Check((await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id })).StatusCode == HttpStatusCode.Forbidden, "B47 member cannot self check in");
+Check((await http.GetAsync("/api/check-ins")).StatusCode == HttpStatusCode.Forbidden, "B47 member cannot view all check-ins");
+Login(memberAccount);
+Check((await Json(await http.GetAsync("/api/members/me/check-ins"))).GetProperty("totalItems").GetInt32() == 0, "B47 history isolation");
+Login(coachAccount);
+Check((await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id })).StatusCode == HttpStatusCode.Forbidden, "B47 coach cannot check in");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var card = (await db.Memberships.FindAsync(wfCardId))!;
+    card.EndDate = new DateTime(2026,10,24,0,0,0,DateTimeKind.Utc); await db.SaveChangesAsync();
+}
+Login(manager);
+Check((await http.PutAsJsonAsync($"/api/membership-packages/{wfPackageId}", new { packageName = "Restricted", durationDays = 30, price = 100, status = 1, categoryIds = new[] { wfWrongCategory.Id } })).IsSuccessStatusCode, "B46 change allowed sport");
+Login(wfAccount);
+Check((await http.PostAsJsonAsync("/api/class-bookings", new { classId = wfClass.Id })).StatusCode == HttpStatusCode.BadRequest, "B46 wrong sport rejected");
+Login(manager);
+Check((await http.PostAsJsonAsync("/api/check-ins", new { memberId = wfMember.Id })).StatusCode == HttpStatusCode.Created, "B47 manager check-in ignores sport restriction");
+var wfUpdatePackage = new { packageName = "All sports", durationDays = 30, price = 100, status = 1, categoryIds = Array.Empty<Guid>() };
+Check((await http.PutAsJsonAsync($"/api/membership-packages/{wfPackageId}", wfUpdatePackage)).IsSuccessStatusCode, "B46 empty categories allow all sports");
+Login(wfAccount);
+var wfBooked = await http.PostAsJsonAsync("/api/class-bookings", new { classId = wfClass.Id });
+Check(wfBooked.IsSuccessStatusCode && (await Json(wfBooked)).GetProperty("eligibleMembershipId").GetGuid() == wfCardId, "B45 valid card books and reports selected membership");
+Check((await Json(wfBooked)).GetProperty("membershipEndDate").GetDateTime() < wfClass.EndDate, "B45 card need not cover entire class");
+
+// FIX B49: một SaveChanges cho các học viên hợp lệ, bỏ booking hủy và chống coach lớp khác.
+var wfExtra = new Member { Id = Guid.NewGuid(), Account = Account(AccountRole.Member, "workflow_extra"), FullName = "Extra", Phone = "0990000003" };
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(wfExtra);
+    db.ClassBookings.AddRange(new ClassBooking { Id = Guid.NewGuid(), ClassId = wfClass.Id, MemberId = wfExtra.Id, Status = BookingStatus.Booked },
+        new ClassBooking { Id = Guid.NewGuid(), ClassId = wfClass.Id, MemberId = member.Id, Status = BookingStatus.Cancelled },
+        new ClassBooking { Id = Guid.NewGuid(), ClassId = wfClass.Id, MemberId = other.Id, Status = BookingStatus.Booked, IsDeleted = true });
+    await db.SaveChangesAsync();
+}
+Login(manager);
+Check((await http.PostAsJsonAsync($"/api/training-plans/class/{wfClass.Id}", new { title = "Shared", contentDescription = "Practice" })).StatusCode == HttpStatusCode.Forbidden, "B49 manager cannot create coach plan");
+Login(coachAccount);
+var savesBeforeBatch = workflowSaves.Count;
+var wfBulk = await http.PostAsJsonAsync($"/api/training-plans/class/{wfClass.Id}", new { title = "Shared", contentDescription = "Practice" });
+Check(wfBulk.IsSuccessStatusCode && (await Json(wfBulk)).GetProperty("createdCount").GetInt32() == 2, "B49 class plans created only for booked active members");
+Check(workflowSaves.Count - savesBeforeBatch == 1, "B49 class batch uses one SaveChanges including audit");
+var wfPlanId = (await Json(wfBulk)).GetProperty("data").EnumerateArray().Single(p => p.GetProperty("memberId").GetGuid() == wfMember.Id).GetProperty("trainingPlanId").GetGuid();
+Check((await http.PostAsJsonAsync($"/api/training-plans/class/{wfClass.Id}", new { title = " " })).StatusCode == HttpStatusCode.BadRequest, "B49 empty title rejected before saving");
+var wfAlienCoachAccount = Account(AccountRole.Coach, "workflow_other_coach");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(new Coach { Id = Guid.NewGuid(), Account = wfAlienCoachAccount, FullName = "Other coach", Phone = "0990000002" }); await db.SaveChangesAsync();
+}
+Login(wfAlienCoachAccount);
+Check((await http.PostAsJsonAsync($"/api/training-plans/class/{wfClass.Id}", new { title = "Attack" })).StatusCode == HttpStatusCode.Forbidden, "B49 other coach cannot create class plans");
+
+// FIX B51: Session phải đúng lớp và có Attendance Present/Late, null giữ tương thích cũ.
+Login(coachAccount);
+object WfResult(Guid? sessionId) => new { planId = wfPlanId, memberId = wfMember.Id, coachId = coach.Id, sessionId, performanceScore = 8, coachComment = "Good", evaluationDate = "2026-10-24T00:00:00Z" };
+Check((await http.PostAsJsonAsync("/api/training-results", WfResult(session.Id))).StatusCode == HttpStatusCode.BadRequest, "B51 wrong-class session denied");
+Check((await http.PostAsJsonAsync("/api/training-results", WfResult(wfSession.Id))).StatusCode == HttpStatusCode.BadRequest, "B51 unrecorded attendance denied");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Attendances.Add(new Attendance { Id = Guid.NewGuid(), SessionId = wfSession.Id, MemberId = wfMember.Id, Status = AttendanceStatus.Late, RecordedBy = coachAccount.Id }); await db.SaveChangesAsync();
+}
+var wfResultHttp = await http.PostAsJsonAsync("/api/training-results", WfResult(wfSession.Id));
+Check(wfResultHttp.IsSuccessStatusCode && (await Json(wfResultHttp)).GetProperty("sessionId").GetGuid() == wfSession.Id, "B51 late attendee result linked to session");
+var wfResultId = (await Json(wfResultHttp)).GetProperty("trainingResultId").GetGuid();
+Check((await http.PutAsJsonAsync($"/api/training-results/{wfResultId}", WfResult(session.Id))).StatusCode == HttpStatusCode.BadRequest, "B51 update cannot move result to wrong class session");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var row = await db.Attendances.SingleAsync(a => a.SessionId == wfSession.Id && a.MemberId == wfMember.Id);
+    row.Status = AttendanceStatus.Absent; await db.SaveChangesAsync();
+}
+Check((await http.PutAsJsonAsync($"/api/training-results/{wfResultId}", WfResult(wfSession.Id))).StatusCode == HttpStatusCode.BadRequest, "B51 absent attendee update denied");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check((await db.TrainingResults.FindAsync(wfResultId))!.SessionId == wfSession.Id, "B51 failed update preserves saved session");
+}
+Check((await http.PostAsJsonAsync("/api/training-results", WfResult(null))).IsSuccessStatusCode, "B51 legacy general result remains supported");
+
+// FIX B50: chỉ Manager chuyển người KHÁC, hồ sơ lịch sử giữ ID và role cũ hết quyền.
+object WfRoleBody(Account account, AccountRole role) => new { username = account.Username, email = account.Email, fullName = "Reception promoted", phone = "0900000004", status = 1, role };
+Login(receptionistAccount);
+Check((await http.PutAsJsonAsync($"/api/accounts/{receptionistAccount.Id}", WfRoleBody(receptionistAccount, AccountRole.CenterManager))).StatusCode == HttpStatusCode.Forbidden, "B50 receptionist cannot promote self");
+Login(coachAccount);
+Check((await http.PutAsJsonAsync($"/api/accounts/{receptionistAccount.Id}", WfRoleBody(receptionistAccount, AccountRole.CenterManager))).StatusCode == HttpStatusCode.Forbidden, "B50 coach cannot promote receptionist");
+Login(manager);
+Check((await http.PutAsJsonAsync($"/api/accounts/{manager.Id}", WfRoleBody(manager, AccountRole.Receptionist))).StatusCode == HttpStatusCode.Forbidden, "B50 manager cannot change own role");
+var wfPromote = await http.PutAsJsonAsync($"/api/accounts/{receptionistAccount.Id}", WfRoleBody(receptionistAccount, AccountRole.CenterManager));
+if (!wfPromote.IsSuccessStatusCode) Console.WriteLine($"DEBUG B50 {wfPromote.StatusCode} {await wfPromote.Content.ReadAsStringAsync()}");
+Check(wfPromote.IsSuccessStatusCode, "B50 manager promotes receptionist");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var a = await db.Accounts.Include(x => x.Receptionist).Include(x => x.CenterManager).SingleAsync(x => x.Id == receptionistAccount.Id);
+    Check(a.Role == AccountRole.CenterManager && a.Receptionist!.IsDeleted && a.CenterManager != null && !a.CenterManager.IsDeleted, "B50 active manager profile and soft-deleted receptionist");
+    Check(a.Receptionist!.Id == receptionist.Id && await db.Set<CheckIn>().AnyAsync(x => x.ReceptionistId == receptionist.Id), "B50 old receptionist ID and check-in history preserved");
+    Check(a.FullName == "Reception promoted" && a.Phone == "0900000004", "B50 old profile does not overwrite new account contact");
+    var options = app.Services.GetRequiredService<IOptionsMonitor<Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerOptions>>().Get("Bearer");
+    var ctx = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+    async Task<bool> WfValidateRole(string role) {
+        var tokenContext = new Microsoft.AspNetCore.Authentication.JwtBearer.TokenValidatedContext(ctx,
+            new AuthenticationScheme("Bearer", null, typeof(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerHandler)), options) {
+            Principal = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim(ClaimTypes.NameIdentifier, a.Id.ToString()), new Claim(ClaimTypes.Role, role) }, "Bearer")) };
+        await options.Events.TokenValidated(tokenContext); return tokenContext.Result?.Failure == null;
+    }
+    Check(!await WfValidateRole(nameof(AccountRole.Receptionist)), "B50 production JWT rejects previous role");
+    Check(await WfValidateRole(nameof(AccountRole.CenterManager)), "B50 production JWT accepts current role");
+}
+Check(!(await Json(await http.GetAsync("/api/receptionists"))).EnumerateArray().Any(x => x.GetProperty("accountId").GetGuid() == receptionistAccount.Id), "B50 promoted account removed from receptionist list");
+Check((await http.PutAsJsonAsync($"/api/accounts/{receptionistAccount.Id}", WfRoleBody(receptionistAccount, AccountRole.Receptionist))).IsSuccessStatusCode, "B50 manager can restore previous role");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check(await db.Receptionists.CountAsync(x => x.AccountId == receptionistAccount.Id && !x.IsDeleted) == 1 &&
+        (await db.Receptionists.SingleAsync(x => x.AccountId == receptionistAccount.Id)).Id == receptionist.Id, "B50 restore old profile without duplicate account FK");
+}
+// FIX B45 B47: kiểm tra chính query dùng ở production biên dịch được bằng provider Npgsql.
+using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string>())) {
+    var eligibilitySql = SWP_SportCenter.Service.Membership.MembershipEligibility.Query(schema, wfMember.Id, new DateOnly(2026,10,24), category.Id).ToQueryString();
+    Check(eligibilitySql.Contains("membership_package_category"), "B45 B46 PostgreSQL membership predicate compiles");
+    using var scope = app.Services.CreateScope();
+    var service = new SWP_SportCenter.Service.CheckIns.CheckInService(schema, scope.ServiceProvider.GetRequiredService<CurrentActor>(), new FixedClock(bookingNow));
+    var query = (IQueryable<SWP_SportCenter.Service.CheckIns.CheckInResponse>)typeof(SWP_SportCenter.Service.CheckIns.CheckInService)
+        .GetMethod("Query", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(service, null)!;
+    Check(query.ToQueryString().Contains("check_in"), "B47 PostgreSQL check-in projection compiles");
+    var migrationSql = schema.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().GenerateScript("20261025134337_SecurePaymentsAndProfileImages");
+    Check(migrationSql.Contains("CREATE TABLE check_in") && migrationSql.Contains("membership_package_category") && migrationSql.Contains("SessionId"), "B46 B47 B51 additive migration SQL generated without connection");
+}
 Console.WriteLine($"RESULT {passed} checks passed");
 await app.StopAsync();
 await app.DisposeAsync();
@@ -617,6 +840,15 @@ sealed class TestAuth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILog
 sealed class FixedClock(DateTimeOffset now) : TimeProvider
 {
     public override DateTimeOffset GetUtcNow() => now;
+}
+
+// FIX B49: chỉ đếm, không thay đổi hành vi lưu dữ liệu.
+sealed class WorkflowSaveCounter : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+{
+    public int Count;
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+        Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData data, Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result, CancellationToken cancellationToken = default)
+    { Interlocked.Increment(ref Count); return ValueTask.FromResult(result); }
 }
 
 // FIX B22: cloud fake riêng trong test, không đưa credential vào repo hoặc gọi Cloudinary thật.

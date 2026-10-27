@@ -7,6 +7,9 @@ public class Request
 {
     public class UpdateAccountRequest
     {
+        // FIX B50: null giữ role hiện tại; chuyển role chỉ dành cho Manager.
+        [EnumDataType(typeof(AccountRole))]
+        public AccountRole? Role { get; set; }
         [Required(ErrorMessage = "Username không được để trống")]
         [MaxLength(100)]
         public string Username { get; set; } = string.Empty;

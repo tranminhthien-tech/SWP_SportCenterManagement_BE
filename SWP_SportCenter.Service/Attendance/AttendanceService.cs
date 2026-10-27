@@ -36,9 +36,11 @@ public class AttendanceService : IAttendanceService
                 // FIX B5: dữ liệu lớp đi kèm điểm danh.
                 ClassId = a.Session.ClassId,
                 ClassName = a.Session.Class.ClassName,
+                // CODE CŨ: a.Session.Date.ToDateTime(TimeOnly.MinValue) hoặc DateTime.MinValue không có Kind.
+                // FIX B52: ngày buổi học luôn có UTC Z, kể cả giá trị fallback.
                 SessionDate = a.Session != null
-                    ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
-                    : DateTime.MinValue,
+                    ? DateTime.SpecifyKind(a.Session.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+                    : DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc),
                 SessionStartTime = a.Session != null ? a.Session.StartTime : TimeSpan.Zero,
                 MemberId = a.MemberId,
                 MemberName = a.Member != null ? a.Member.FullName : string.Empty,
@@ -67,9 +69,11 @@ public class AttendanceService : IAttendanceService
                 // FIX B5: dữ liệu lớp đi kèm điểm danh.
                 ClassId = a.Session.ClassId,
                 ClassName = a.Session.Class.ClassName,
+                // CODE CŨ: a.Session.Date.ToDateTime(TimeOnly.MinValue) hoặc DateTime.MinValue không có Kind.
+                // FIX B52: lịch sử Member dùng cùng quy ước UTC của lịch lớp.
                 SessionDate = a.Session != null
-                    ? a.Session.Date.ToDateTime(TimeOnly.MinValue)
-                    : DateTime.MinValue,
+                    ? DateTime.SpecifyKind(a.Session.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc)
+                    : DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc),
                 SessionStartTime = a.Session != null ? a.Session.StartTime : TimeSpan.Zero,
                 MemberId = a.MemberId,
                 MemberName = a.Member != null ? a.Member.FullName : string.Empty,
@@ -139,7 +143,9 @@ public class AttendanceService : IAttendanceService
             // FIX B5: dữ liệu lớp đi kèm điểm danh.
             ClassId = savedAttendance.Session.ClassId,
             ClassName = savedAttendance.Session.Class.ClassName,
-            SessionDate = savedAttendance.Session.Date.ToDateTime(TimeOnly.MinValue),
+            // CODE CŨ: SessionDate = savedAttendance.Session.Date.ToDateTime(TimeOnly.MinValue),
+            // FIX B52: response sau ghi điểm danh cũng có UTC Z.
+            SessionDate = DateTime.SpecifyKind(savedAttendance.Session.Date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
             SessionStartTime = savedAttendance.Session.StartTime,
             MemberId = savedAttendance.MemberId,
             MemberName = savedAttendance.Member.FullName,

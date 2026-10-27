@@ -19,6 +19,8 @@ public class MembershipPackage: BaseEntity, IAuditableEntity
     // Navigation
     public ICollection<Membership> Memberships { get; set; }
         = new List<Membership>();
+    // FIX B46: phạm vi môn của gói, rỗng = mọi môn.
+    public ICollection<MembershipPackageCategory> Categories { get; set; } = new List<MembershipPackageCategory>();
     
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
