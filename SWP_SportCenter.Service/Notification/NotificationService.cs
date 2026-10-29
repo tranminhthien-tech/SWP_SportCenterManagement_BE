@@ -48,6 +48,7 @@ public class NotificationService : INotificationService
             .Select(n => new Response.NotificationResponse
             {
                 Id = n.Id,
+                SenderAccountId = n.SenderAccountId, SenderName = n.SenderName ?? "Hệ thống", SenderRole = n.SenderRole, // FIX B57
                 AccountId = n.AccountId,
                 Title = n.Title,
                 Message = n.Message,
@@ -116,7 +117,8 @@ public class NotificationService : INotificationService
         {
             var actorId = GetCurrentAccountId();
             var allowed = await _db.ClassBookings.Where(b => !b.IsDeleted &&
-                    b.Status != Repository.Enum.BookingStatus.Cancelled && !b.Class.IsDeleted &&
+                    // CODE CŨ: Status != Cancelled.
+                    (b.Status == Repository.Enum.BookingStatus.Booked || b.Status == Repository.Enum.BookingStatus.Attended) && !b.Class.IsDeleted && // FIX B53
                     !b.Class.Coach.IsDeleted && b.Class.Coach.AccountId == actorId &&
                     !b.Member.IsDeleted && !b.Member.Account.IsDeleted &&
                     b.Member.Account.Status == Repository.Enum.AccountStatus.Active)
@@ -133,10 +135,14 @@ public class NotificationService : INotificationService
             .Select(a => a.Id)
             .ToListAsync();
 
+        // FIX B57: danh tính lấy từ token và DB, không nhận SenderAccountId từ body.
+        var sender = await _db.Accounts.AsNoTracking().SingleAsync(a => a.Id == GetCurrentAccountId() && !a.IsDeleted);
         var notifications = existingIds.Select(accountId =>
             new Repository.Entity.Notification
             {
                 AccountId = accountId,
+                SenderAccountId = sender.Id, SenderName = string.IsNullOrWhiteSpace(sender.FullName) ? sender.Username : sender.FullName,
+                SenderRole = sender.Role.ToString(), // FIX B57
                 Title = request.Title.Trim(),
                 Message = request.Message.Trim(),
                 IsRead = false
@@ -153,6 +159,7 @@ public class NotificationService : INotificationService
         return new Response.NotificationResponse
         {
             Id = first.Id,
+            SenderAccountId = first.SenderAccountId, SenderName = first.SenderName ?? "Hệ thống", SenderRole = first.SenderRole, // FIX B57
             // FIX B16: số người nhận hợp lệ sau khi lọc Account trùng/không tồn tại.
             SentCount = notifications.Count,
             AccountId = first.AccountId,

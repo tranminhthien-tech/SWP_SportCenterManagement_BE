@@ -20,6 +20,8 @@ public class Response
 
     public class MonthlyRevenueItem
     {
+        public decimal MembershipRevenue { get; set; } // FIX B53
+        public decimal ClassRevenue { get; set; }
         public int Year { get; set; }
         public int Month { get; set; }
         public decimal Revenue { get; set; }

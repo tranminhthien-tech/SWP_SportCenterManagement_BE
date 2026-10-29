@@ -41,6 +41,7 @@ public class Service: IService
             new Response.MembershipPackageResponse
             {
                 MembershipPackageId = x.Id,
+                DiscountPercent = x.DiscountPercent, Benefits = x.Benefits, // FIX B53
                 CategoryIds = x.Categories.Select(c => c.CategoryId).ToList(), // FIX B46
                 PackageName = x.PackageName,
                 Description = x.Description,
@@ -75,6 +76,7 @@ public class Service: IService
             .Select(x => new Response.MembershipPackageResponse
             {
                 MembershipPackageId = x.Id,
+                DiscountPercent = x.DiscountPercent, Benefits = x.Benefits, // FIX B53
                 CategoryIds = x.Categories.Select(c => c.CategoryId).ToList(), // FIX B46
                 PackageName = x.PackageName,
                 Description = x.Description,
@@ -118,6 +120,7 @@ public class Service: IService
         {
             Id = Guid.NewGuid(),
             PackageName = request.PackageName.Trim(),
+            DiscountPercent = request.DiscountPercent, Benefits = request.Benefits, // FIX B53
             Description = request.Description,
             DurationDays = request.DurationDays,
             Price = request.Price,
@@ -132,6 +135,7 @@ public class Service: IService
         var result = new Response.MembershipPackageResponse
         {
             MembershipPackageId = package.Id,
+            DiscountPercent = package.DiscountPercent, Benefits = package.Benefits, // FIX B53
             CategoryIds = categoryIds, // FIX B46
             PackageName = package.PackageName,
             Description = package.Description,
@@ -187,6 +191,7 @@ public class Service: IService
                 package.Categories.Add(new Repository.Entity.MembershipPackageCategory { CategoryId = categoryId });
         }
         package.PackageName = request.PackageName.Trim();
+        package.DiscountPercent = request.DiscountPercent; package.Benefits = request.Benefits; // FIX B53
         package.Description = request.Description;
         package.DurationDays = request.DurationDays;
         package.Price = request.Price;

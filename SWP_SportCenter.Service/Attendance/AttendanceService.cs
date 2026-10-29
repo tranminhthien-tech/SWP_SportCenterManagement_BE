@@ -99,7 +99,9 @@ public class AttendanceService : IAttendanceService
 
         // 2. Kiểm tra học viên có đăng ký tham gia lớp này không
         var isBooked = await _context.ClassBookings
-            .AnyAsync(cb => cb.ClassId == session.ClassId && cb.MemberId == request.MemberId);
+            // CODE CŨ: tồn tại booking là đủ, gồm cả PendingPayment/Cancelled.
+            .AnyAsync(cb => cb.ClassId == session.ClassId && cb.MemberId == request.MemberId && !cb.IsDeleted &&
+                (cb.Status == BookingStatus.Booked || cb.Status == BookingStatus.Attended)); // FIX B53
             
         // CODE CŨ: if (!isBooked) throw new Exception("Học viên này không có trong danh sách đăng ký của lớp học.");
         // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
@@ -202,7 +204,8 @@ public class AttendanceService : IAttendanceService
                 cb.ClassId == classId);
 
         if (booking == null ||
-            booking.Status == BookingStatus.Cancelled)
+            // CODE CŨ: chỉ bỏ qua Cancelled.
+            booking.Status is BookingStatus.Cancelled or BookingStatus.PendingPayment) // FIX B53
             return;
 
         var hasAttended = await _context.Attendances

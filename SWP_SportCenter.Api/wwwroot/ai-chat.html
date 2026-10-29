@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>SportCenter AI</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#20242b;font:16px/1.5 system-ui,sans-serif}
+    main{max-width:720px;margin:30px auto;padding:24px;background:white;border-radius:16px;box-shadow:0 6px 30px #0001}
+    h1{margin:0 0 8px;font-size:26px}small{display:block;color:#586475;margin:8px 0 20px}
+    label{display:block;font-weight:600;margin:12px 0 5px}input,textarea,select,button{font:inherit;border-radius:8px;padding:10px;border:1px solid #cbd1d9}
+    input,textarea,select{width:100%}textarea{resize:vertical;min-height:90px}button{cursor:pointer;background:#ed501e;color:white;border:0}
+    button:disabled{opacity:.55;cursor:wait}#messages{height:320px;overflow:auto;border:1px solid #e3e6eb;border-radius:8px;padding:16px;margin:18px 0}
+    .message{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;margin:8px 0;border-radius:10px;background:#f0f2f5}.user{background:#fff0e9}.error{background:#fff0f0;color:#a62626}
+    .actions{display:flex;gap:10px;margin-top:12px}.secondary{background:#667085}#status{min-height:24px;color:#667085;margin-top:8px}
+    @media(max-width:760px){main{margin:0;min-height:100vh;border-radius:0;padding:18px}}
+  </style>
+</head>
+<body><main>
+  <h1>SportCenter AI</h1>
+  <p>Hỏi đáp cơ bản và gợi ý bài tập. AI không thực hiện đặt lớp, thanh toán hoặc thay đổi hồ sơ.</p>
+  <small>Trang thử API trên cùng backend. Chỉ dùng localhost hoặc HTTPS. Nội dung hỏi được gửi tới Gemini khi AI đã bật; tránh thông tin nhạy cảm. Gợi ý không thay thế Coach hoặc chuyên gia y tế.</small>
+  <label for="token">Access token sau đăng nhập</label>
+  <input id="token" type="password" autocomplete="off" placeholder="Dán JWT của tài khoản Member hoặc Coach, không phải khóa SePay/Gemini">
+  <small>JWT chỉ giữ trong ô này, không lưu localStorage hoặc đưa vào URL. Không chia sẻ JWT cho người khác.</small>
+  <label for="mode">Chức năng</label><select id="mode"><option value="chat">Hỏi đáp</option><option value="exercise-suggestions">Gợi ý bài tập dành cho Coach</option></select>
+  <div id="messages" role="log" aria-live="polite"></div>
+  <label for="question">Câu hỏi hoặc mục tiêu tập</label><textarea id="question" maxlength="2000" placeholder="Ví dụ: Tôi mới tập, nên bắt đầu thế nào?"></textarea>
+  <div class="actions"><button id="send" type="button">Gửi</button><button id="clear" type="button" class="secondary">Xóa hội thoại</button></div>
+  <div id="status" role="status"></div>
+</main>
+<script>
+// FIX B48: demo cùng origin, không nhúng AI API Key, không dùng innerHTML cho nội dung người dùng/AI.
+const el=id=>document.getElementById(id);let history=[];
+function show(text,kind){const p=document.createElement('div');p.className='message '+(kind||'');p.textContent=text;el('messages').appendChild(p);el('messages').scrollTop=el('messages').scrollHeight;}
+el('clear').onclick=()=>{history=[];el('messages').replaceChildren();el('status').textContent='Đã xóa hội thoại trên trang.';};
+el('send').onclick=async()=>{
+  const token=el('token').value.trim().replace(/^Bearer\s+/i,'');const message=el('question').value.trim();const mode=el('mode').value;
+  if(!token||!message){el('status').textContent='Cần JWT sau đăng nhập và câu hỏi.';return;}
+  el('send').disabled=true;el('status').textContent='Đang chờ AI...';show('Bạn: '+message,'user');
+  try{
+    const body=mode==='chat'?{message,history:history.slice(-6).map(m=>({...m,content:m.content.slice(0,1000)}))}:{goal:message.slice(0,1000),durationMinutes:30,level:'beginner',equipment:''};
+    const res=await fetch('/api/ai/'+mode,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)});
+    const raw=await res.text();let data={};try{data=JSON.parse(raw);}catch{}
+    if(!res.ok)throw new Error(res.status===429?'Bạn hỏi quá nhanh, hãy chờ một phút.':data.message||data.detail||('Yêu cầu thất bại: HTTP '+res.status));
+    const answer=data.reply||data.suggestions||'Chưa có câu trả lời.';show('AI: '+answer);if(data.disclaimer)show(data.disclaimer);
+    if(mode==='chat')history.push({role:'user',content:message},{role:'assistant',content:answer});
+    el('question').value='';el('status').textContent='Đã trả lời.';
+  }catch(error){show(error.message,'error');el('status').textContent='Chưa nhận được câu trả lời.';}
+  finally{el('send').disabled=false;}
+};
+window.addEventListener('pagehide',()=>{el('token').value='';history=[];});
+</script></body></html>

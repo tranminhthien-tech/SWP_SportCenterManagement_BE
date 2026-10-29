@@ -10,12 +10,14 @@ namespace SWP_SportCenter.Controllers;
 public class MembershipController : ControllerBase
 {
     // FIX B20: bổ sung API sửa/xóa mềm membership.
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPut("memberships/{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] Request.UpdateMembershipRequest request)
         => await _service.UpdateAsync(id, request) ? NoContent() : NotFound(new { message = "Membership not found" });
 
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpDelete("memberships/{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
         => await _service.DeleteAsync(id) ? NoContent() : NotFound(new { message = "Membership not found" });
@@ -129,7 +131,8 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships
     // Đăng ký / mua Membership
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPost("memberships")]
     public async Task<IActionResult> Create(
         [FromBody] Request.MembershipRequest request)
@@ -141,7 +144,8 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships/{id}/renew
     // Gia hạn Membership
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPost("memberships/{id:guid}/renew")]
     public async Task<IActionResult> Renew(
         [FromRoute] Guid id,
@@ -161,7 +165,8 @@ public class MembershipController : ControllerBase
 
     // POST /api/memberships/{id}/cancel
     // Hủy Membership
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPost("memberships/{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(
         [FromRoute] Guid id)

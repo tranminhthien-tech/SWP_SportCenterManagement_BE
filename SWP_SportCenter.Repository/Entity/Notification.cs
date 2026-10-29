@@ -4,6 +4,10 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class Notification: BaseEntity, IAuditableEntity
 {
+    public Guid? SenderAccountId { get; set; } // FIX B57: null = hệ thống.
+    public Account? SenderAccount { get; set; }
+    public string? SenderName { get; set; } // FIX B57: snapshot, đổi role/tên sau không sửa lịch sử.
+    public string? SenderRole { get; set; }
     // FIX B32: null cho thông báo thường; giữ khóa nhắc hạn ngay cả khi xóa mềm.
     public string? DeduplicationKey { get; set; }
     

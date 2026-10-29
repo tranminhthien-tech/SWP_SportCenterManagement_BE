@@ -8,6 +8,8 @@ public class Request
 {
     public class CreateClassRequest
     {
+        [Range(typeof(decimal), "0", "9999999999")]
+        public decimal Price { get; set; } // FIX B53
         [Required(ErrorMessage = "Tên lớp học không được để trống")]
         [MaxLength(150)]
         public string ClassName { get; set; } = string.Empty;
@@ -32,6 +34,8 @@ public class Request
 
     public class UpdateClassRequest
     {
+        [Range(typeof(decimal), "0", "9999999999")]
+        public decimal Price { get; set; } // FIX B53
         [Required(ErrorMessage = "Tên lớp học không được để trống")]
         [MaxLength(150)]
         public string ClassName { get; set; } = string.Empty;

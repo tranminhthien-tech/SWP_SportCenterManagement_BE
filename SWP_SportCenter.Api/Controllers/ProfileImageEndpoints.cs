@@ -55,7 +55,8 @@ public partial class CenterManagerController
 }
 public partial class MemberController
 {
-    [HttpPost, Consumes("multipart/form-data"), Authorize(Policy = "ManagerOrReceptionistPolicy"), RequestSizeLimit(6 * 1024 * 1024)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [HttpPost, Consumes("multipart/form-data"), Authorize(Policy = "ReceptionistPolicy"), RequestSizeLimit(6 * 1024 * 1024)] // FIX B58
     public async Task<IActionResult> CreateForm([FromForm] SWP_SportCenter.Service.Member.Request.MemberRequest request, [FromServices] Media media)
     {
         request.Avatar = await ProfileImageForm.ResolveAsync(Request, media, request.Avatar);

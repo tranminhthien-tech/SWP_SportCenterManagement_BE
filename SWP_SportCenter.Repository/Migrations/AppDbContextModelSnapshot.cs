@@ -413,6 +413,10 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("max_capacity");
 
+                    b.Property<decimal>("Price")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("start_date");
@@ -447,6 +451,9 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("booking_date");
 
+                    b.Property<DateTimeOffset?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("ClassId")
                         .HasColumnType("uuid")
                         .HasColumnName("class_id");
@@ -454,12 +461,33 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("DiscountPercent")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
                     b.Property<Guid>("MemberId")
                         .HasColumnType("uuid")
                         .HasColumnName("member_id");
+
+                    b.Property<Guid?>("MembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("OriginalPrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTimeOffset?>("PaymentExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<decimal?>("RefundAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -474,8 +502,11 @@ namespace SWP_SportCenter.Repository.Migrations
 
                     b.HasIndex("MemberId");
 
+                    b.HasIndex("MembershipId");
+
                     b.HasIndex("MemberId", "ClassId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false AND status <> 3");
 
                     b.ToTable("class_booking", (string)null);
                 });
@@ -647,15 +678,38 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("amount");
 
+                    b.Property<Guid?>("ClassBookingId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("CreditAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("DiscountPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FromPackageName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("MemberMembershipId")
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("MemberMembershipId")
                         .HasColumnType("uuid")
                         .HasColumnName("member_membership_id");
+
+                    b.Property<decimal>("OriginalAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)");
 
                     b.Property<DateTimeOffset?>("PaymentDate")
                         .HasColumnType("timestamp with time zone")
@@ -669,9 +723,42 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("payment_method");
 
+                    b.Property<string>("PaymentReference")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
                     b.Property<Guid?>("ReceptionistId")
                         .HasColumnType("uuid")
                         .HasColumnName("receptionist_id");
+
+                    b.Property<Guid?>("RefundConfirmedByAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RefundReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("RefundRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RefundedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SePayAccountNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SePayBankBin")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SePayGateway")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SePayQrCodeUrl")
+                        .HasMaxLength(1200)
+                        .HasColumnType("character varying(1200)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -680,16 +767,38 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UpgradeFromMembershipId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpgradeSourceEndDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("WasExpired")
+                        .HasColumnType("boolean");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ClassBookingId")
+                        .IsUnique();
 
                     b.HasIndex("MemberMembershipId")
                         .IsUnique();
 
+                    b.HasIndex("PaymentReference")
+                        .IsUnique();
+
                     b.HasIndex("ReceptionistId");
+
+                    b.HasIndex("RefundConfirmedByAccountId");
 
                     b.HasIndex("Status");
 
-                    b.ToTable("invoice", (string)null);
+                    b.HasIndex("UpgradeFromMembershipId");
+
+                    b.ToTable("invoice", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_invoice_subject", "(member_membership_id IS NOT NULL AND \"ClassBookingId\" IS NULL) OR (member_membership_id IS NULL AND \"ClassBookingId\" IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
@@ -794,11 +903,16 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UpgradedFromId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MemberId");
 
                     b.HasIndex("PackageId");
+
+                    b.HasIndex("UpgradedFromId");
 
                     b.HasIndex("MemberId", "PackageId");
 
@@ -813,6 +927,11 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnName("package_id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("Benefits")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -820,6 +939,9 @@ namespace SWP_SportCenter.Repository.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("description");
+
+                    b.Property<int>("DiscountPercent")
+                        .HasColumnType("integer");
 
                     b.Property<int>("DurationDays")
                         .HasColumnType("integer")
@@ -906,6 +1028,17 @@ namespace SWP_SportCenter.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("message");
 
+                    b.Property<Guid?>("SenderAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SenderName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("SenderRole")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -923,6 +1056,8 @@ namespace SWP_SportCenter.Repository.Migrations
                         .IsUnique();
 
                     b.HasIndex("IsRead");
+
+                    b.HasIndex("SenderAccountId");
 
                     b.ToTable("notification", (string)null);
                 });
@@ -1019,6 +1154,67 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("room", (string)null);
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SePayWebhookReceipt", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AccountNumber")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("BankReferenceCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("BankTransactionDate")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Content")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Gateway")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("PayloadHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubAccount")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal>("TransferAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("Outcome");
+
+                    b.HasIndex("ReceivedAt");
+
+                    b.ToTable("sepay_webhook_receipt", (string)null);
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SportCategory", b =>
@@ -1322,9 +1518,16 @@ namespace SWP_SportCenter.Repository.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Membership", "Membership")
+                        .WithMany()
+                        .HasForeignKey("MembershipId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Class");
 
                     b.Navigation("Member");
+
+                    b.Navigation("Membership");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.ClassSession", b =>
@@ -1359,20 +1562,40 @@ namespace SWP_SportCenter.Repository.Migrations
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Invoice", b =>
                 {
+                    b.HasOne("SWP_SportCenter.Repository.Entity.ClassBooking", "ClassBooking")
+                        .WithOne("Invoice")
+                        .HasForeignKey("SWP_SportCenter.Repository.Entity.Invoice", "ClassBookingId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("SWP_SportCenter.Repository.Entity.Membership", "Membership")
                         .WithOne("Invoice")
                         .HasForeignKey("SWP_SportCenter.Repository.Entity.Invoice", "MemberMembershipId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("SWP_SportCenter.Repository.Entity.Receptionist", "Receptionist")
                         .WithMany("Invoices")
                         .HasForeignKey("ReceptionistId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Account", "RefundConfirmedByAccount")
+                        .WithMany()
+                        .HasForeignKey("RefundConfirmedByAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Membership", "UpgradeFromMembership")
+                        .WithMany()
+                        .HasForeignKey("UpgradeFromMembershipId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ClassBooking");
+
                     b.Navigation("Membership");
 
                     b.Navigation("Receptionist");
+
+                    b.Navigation("RefundConfirmedByAccount");
+
+                    b.Navigation("UpgradeFromMembership");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Member", b =>
@@ -1400,9 +1623,16 @@ namespace SWP_SportCenter.Repository.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Membership", "UpgradedFrom")
+                        .WithMany()
+                        .HasForeignKey("UpgradedFromId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Member");
 
                     b.Navigation("Package");
+
+                    b.Navigation("UpgradedFrom");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.MembershipPackageCategory", b =>
@@ -1432,7 +1662,14 @@ namespace SWP_SportCenter.Repository.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Account", "SenderAccount")
+                        .WithMany()
+                        .HasForeignKey("SenderAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Account");
+
+                    b.Navigation("SenderAccount");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.Receptionist", b =>
@@ -1444,6 +1681,16 @@ namespace SWP_SportCenter.Repository.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SePayWebhookReceipt", b =>
+                {
+                    b.HasOne("SWP_SportCenter.Repository.Entity.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.SupportRequest", b =>
@@ -1547,6 +1794,11 @@ namespace SWP_SportCenter.Repository.Migrations
                     b.Navigation("ClassSessions");
 
                     b.Navigation("TrainingPlans");
+                });
+
+            modelBuilder.Entity("SWP_SportCenter.Repository.Entity.ClassBooking", b =>
+                {
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("SWP_SportCenter.Repository.Entity.ClassSession", b =>

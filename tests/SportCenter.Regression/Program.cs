@@ -16,6 +16,10 @@ using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Security;
 using SWP_SportCenter.Service.Jwt;
 
+// CODE CŨ: chạy mặc định bộ 311 ca theo hợp đồng B45 (bắt buộc thẻ) và quyền Manager thu tiền.
+// FIX B53 B58: hợp đồng mới thay các quy tắc đó. Giữ nguyên suite cũ để đối chiếu bằng --legacy-contract.
+// Suite mặc định mới kiểm tra đúng workflow hiện tại; không gọi Render hoặc AI/ngân hàng thật.
+if (!args.Contains("--legacy-contract")) { await WorkflowRegression.RunAsync(); return; }
 // FIX: regression suite uses an isolated InMemory database; never contacts Render.
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -66,6 +70,10 @@ builder.Services.AddScoped<SWP_SportCenter.Service.Notification.MembershipExpiry
 builder.Services.AddScoped<SWP_SportCenter.Service.AuditLog.IAuditLogService, SWP_SportCenter.Service.AuditLog.AuditLogService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Accounts.IAccountService, SWP_SportCenter.Service.Accounts.AccountService>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Payment.IPaymentService, SWP_SportCenter.Service.Payment.PaymentService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.ClassCommerceService>(); // FIX: dependencies cho suite hợp đồng cũ được giữ để đối chiếu.
+// FIX SEPAY: mặc định tắt như production chưa cấu hình, bật riêng phần test gateway bên dưới.
+builder.Services.Configure<SWP_SportCenter.Service.Sepay.SePayOptions>(builder.Configuration.GetSection("SePay"));
+builder.Services.AddScoped<SWP_SportCenter.Service.Sepay.ISepayService, SWP_SportCenter.Service.Sepay.SepayService>();
 // FIX B22 B39: test upload giả lập không dùng secret/cloud thật, expiration dùng clock cố định.
 builder.Services.AddScoped<SWP_SportCenter.Service.MediaService.IService, TestMedia>();
 builder.Services.AddScoped<SWP_SportCenter.Service.Receptionist.IReceptionistService, SWP_SportCenter.Service.Receptionist.ReceptionistService>();
@@ -818,6 +826,148 @@ using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string
     Check(query.ToQueryString().Contains("check_in"), "B47 PostgreSQL check-in projection compiles");
     var migrationSql = schema.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().GenerateScript("20261025134337_SecurePaymentsAndProfileImages");
     Check(migrationSql.Contains("CREATE TABLE check_in") && migrationSql.Contains("membership_package_category") && migrationSql.Contains("SessionId"), "B46 B47 B51 additive migration SQL generated without connection");
+}
+// FIX SEPAY: gateway test riêng, không gọi qr.sepay.vn/ngân hàng/Render thật.
+const string sepayKey = "test-only-sepay-webhook-key-not-a-production-secret-2026";
+async Task<HttpResponseMessage> SePayPost(object data, bool withKey = true, string? authorization = null) {
+    using var client = new HttpClient { BaseAddress = http.BaseAddress };
+    using var req = new HttpRequestMessage(HttpMethod.Post, "/api/sepay/webhook") { Content = JsonContent.Create(data) };
+    if (withKey) req.Headers.TryAddWithoutValidation("Authorization", authorization ?? "Apikey " + sepayKey);
+    return await client.SendAsync(req);
+}
+SWP_SportCenter.Service.Sepay.Request.SepayWebhookDto SePayData(string reference, long id, decimal? amount = null) => new() {
+    Id = id, Content = "PAY " + reference + " DONE", Code = reference, TransferAmount = amount ?? package.Price,
+    Gateway = "MBBank", AccountNumber = "000000000000", TransferType = "in",
+    ReferenceCode = "TESTBANK" + id, TransactionDate = "2026-10-23 23:30:00"
+};
+Check((await SePayPost(SePayData("SWP" + Guid.NewGuid().ToString("N").ToUpperInvariant(), 91001))).StatusCode == HttpStatusCode.ServiceUnavailable, "SePay disabled webhook fails closed");
+builder.Configuration["SePay:Enabled"] = "true";
+Login(memberAccount);
+Check((await http.PostAsJsonAsync("/api/payments/checkout", new { membershipPackageId = package.Id, paymentMethod = 2, startDate = "2026-10-24T00:00:00Z" })).StatusCode == HttpStatusCode.ServiceUnavailable, "SePay incomplete configuration returns 503");
+builder.Configuration["SePay:BankBin"] = "970422";
+builder.Configuration["SePay:AccountNumber"] = "000000000000";
+builder.Configuration["SePay:Gateway"] = "MBBank";
+builder.Configuration["SePay:WebhookApiKey"] = sepayKey;
+builder.Configuration["SePay:QrTemplate"] = "compact";
+async Task<JsonElement> SePayCheckout() {
+    Login(memberAccount);
+    var response = await http.PostAsJsonAsync("/api/payments/checkout", new { membershipPackageId = package.Id, paymentMethod = 2, startDate = "2026-10-24T00:00:00Z", returnUrl = "https://untrusted.invalid/?status=paid" });
+    if (!response.IsSuccessStatusCode) Console.WriteLine("DEBUG SePay checkout " + await response.Content.ReadAsStringAsync());
+    Check(response.IsSuccessStatusCode, "SePay checkout creates pending QR payment");
+    return await Json(response);
+}
+var sepayCheckout = await SePayCheckout();
+var sepayPaymentId = sepayCheckout.GetProperty("paymentId").GetGuid();
+var sepayReference = sepayCheckout.GetProperty("paymentReference").GetString()!;
+var sepayQr = sepayCheckout.GetProperty("qrCodeUrl").GetString()!;
+Check(sepayReference == "SWP" + sepayPaymentId.ToString("N").ToUpperInvariant(), "SePay unique full invoice payment reference");
+Check(sepayQr.StartsWith("https://qr.sepay.vn/img?") && sepayQr.Contains("acc=000000000000") && sepayQr.Contains("des=" + sepayReference), "SePay QR includes receiver and exact reference");
+Check(!sepayCheckout.GetRawText().Contains(sepayKey) && !sepayQr.Contains("untrusted.invalid"), "SePay checkout never exposes key or accepts redirect proof");
+Check(sepayCheckout.GetProperty("status").GetInt32() == 1 && sepayCheckout.GetProperty("expiresAt").GetDateTimeOffset() == bookingNow.AddMinutes(30), "SePay pending with 30 minute TTL");
+Check((await http.PostAsJsonAsync("/api/payments/checkout", new { membershipPackageId = package.Id, paymentMethod = 3, startDate = "2026-10-24T00:00:00Z" })).StatusCode == HttpStatusCode.BadRequest, "SePay does not pretend to support card payment");
+using (var scope = app.Services.CreateScope()) {
+    var svc = scope.ServiceProvider.GetRequiredService<SWP_SportCenter.Service.Sepay.ISepayService>();
+    var culture = System.Globalization.CultureInfo.CurrentCulture;
+    try {
+        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("vi-VN");
+        Check((await svc.GenerateQrCode(1000000, sepayReference)).Contains("amount=1000000&"), "SePay QR amount culture invariant");
+    } finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
+}
+var sepayEvent = SePayData(sepayReference, 92001);
+Check((await SePayPost(sepayEvent, withKey: false)).StatusCode == HttpStatusCode.Unauthorized, "SePay no key denied");
+Check((await SePayPost(sepayEvent, authorization: "Apikey WRONG")).StatusCode == HttpStatusCode.Unauthorized, "SePay wrong key denied");
+Check((await SePayPost(sepayEvent, authorization: "Bearer " + sepayKey)).StatusCode == HttpStatusCode.Unauthorized, "SePay JWT scheme cannot replace API Key");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check(!await db.Set<SePayWebhookReceipt>().AnyAsync() && (await db.Invoices.FindAsync(sepayPaymentId))!.Status == InvoiceStatus.Pending, "SePay failed auth writes nothing");
+}
+var outgoing = SePayData(sepayReference, 92002); outgoing.TransferType = "out";
+Check((await SePayPost(outgoing)).IsSuccessStatusCode, "SePay outgoing transfer acknowledged without activation");
+var badDirection = SePayData(sepayReference, 92003); badDirection.TransferType = "unknown";
+Check((await SePayPost(badDirection)).StatusCode == HttpStatusCode.BadRequest, "SePay unknown transfer direction rejected");
+var zeroId = SePayData(sepayReference, 0);
+Check((await SePayPost(zeroId)).StatusCode == HttpStatusCode.BadRequest, "SePay sample ID zero cannot activate membership");
+var wrongReceiver = SePayData(sepayReference, 92004); wrongReceiver.AccountNumber = "111111111111";
+Check((await SePayPost(wrongReceiver)).IsSuccessStatusCode, "SePay wrong receiver recorded for reconciliation");
+var wrongBank = SePayData(sepayReference, 92005); wrongBank.Gateway = "OtherBank";
+Check((await SePayPost(wrongBank)).IsSuccessStatusCode, "SePay wrong gateway recorded for reconciliation");
+Check((await SePayPost(SePayData(sepayReference, 92006, package.Price - 1))).IsSuccessStatusCode, "SePay underpayment acknowledged for reconciliation");
+Check((await SePayPost(SePayData(sepayReference, 92007, package.Price + 1))).IsSuccessStatusCode, "SePay overpayment acknowledged for reconciliation");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check((await db.Invoices.Include(i => i.Membership).SingleAsync(i => i.Id == sepayPaymentId)).Membership.Status == MembershipStatus.Inactive &&
+        (await db.Invoices.FindAsync(sepayPaymentId))!.Status == InvoiceStatus.Pending, "SePay invalid receiver or amount never activates");
+    Check(await db.Set<SePayWebhookReceipt>().CountAsync(r => r.Outcome == "AmountMismatch") == 2 &&
+        await db.Set<SePayWebhookReceipt>().CountAsync(r => r.Outcome == "WrongReceiver") == 2, "SePay rejected funds retained in ledger");
+}
+var accepted = await SePayPost(sepayEvent);
+Check(accepted.IsSuccessStatusCode && (await Json(accepted)).GetProperty("success").GetBoolean(), "SePay valid authenticated incoming event accepted");
+var sepayStatus = await Json(await http.GetAsync($"/api/payments/{sepayPaymentId}"));
+Check(sepayStatus.GetProperty("status").GetInt32() == 2 && sepayStatus.GetProperty("qrCodeUrl").ValueKind == JsonValueKind.Null, "SePay member polling sees Paid and hides QR");
+var sepayPaidAt = sepayStatus.GetProperty("paidAt").GetString();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var row = await db.Invoices.Include(i => i.Membership).SingleAsync(i => i.Id == sepayPaymentId);
+    Check(row.Membership.Status == MembershipStatus.Active && row.ReceptionistId == null && row.PaymentDate == bookingNow, "SePay activates membership without fake staff collector");
+    Check((await db.Set<SePayWebhookReceipt>().FindAsync(92001L))!.Outcome == "Paid", "SePay success receipt persisted with payment");
+}
+Check((await SePayPost(sepayEvent)).IsSuccessStatusCode, "SePay retry same event is idempotent");
+var conflictingEvent = SePayData(sepayReference, 92001, package.Price + 100);
+Check((await SePayPost(conflictingEvent)).StatusCode == HttpStatusCode.Conflict, "SePay reused event ID with changed payload rejected");
+Check((await SePayPost(SePayData(sepayReference, 92008))).IsSuccessStatusCode, "SePay second transfer for Paid invoice retained");
+Check((await Json(await http.GetAsync($"/api/payments/{sepayPaymentId}"))).GetProperty("paidAt").GetString() == sepayPaidAt, "SePay duplicate payment never changes paid date");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check(await db.Set<SePayWebhookReceipt>().CountAsync(r => r.Id == 92001) == 1 &&
+        (await db.Set<SePayWebhookReceipt>().FindAsync(92008L))!.Outcome == "AlreadyPaid", "SePay durable one receipt per event and duplicate payment outcome");
+}
+var sepayCancelled = await SePayCheckout(); var sepayCancelledId = sepayCancelled.GetProperty("paymentId").GetGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); (await db.Invoices.FindAsync(sepayCancelledId))!.Status = InvoiceStatus.Cancelled; await db.SaveChangesAsync();
+}
+Check((await SePayPost(SePayData(sepayCancelled.GetProperty("paymentReference").GetString()!, 93001))).IsSuccessStatusCode, "SePay cancelled invoice funds recorded not resurrected");
+var sepayExpired = await SePayCheckout(); var sepayExpiredId = sepayExpired.GetProperty("paymentId").GetGuid();
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); (await db.Invoices.FindAsync(sepayExpiredId))!.PaymentExpiresAt = bookingNow; await db.SaveChangesAsync();
+}
+Check((await SePayPost(SePayData(sepayExpired.GetProperty("paymentReference").GetString()!, 93002))).IsSuccessStatusCode, "SePay expired invoice funds recorded not activated");
+var missingReference = SePayData("SWP" + Guid.NewGuid().ToString("N").ToUpperInvariant(), 93003);
+Check((await SePayPost(missingReference)).IsSuccessStatusCode, "SePay unmatched payment retained for reconciliation");
+var ambiguous = SePayData(sepayReference, 93004); ambiguous.Content += " " + sepayExpired.GetProperty("paymentReference").GetString();
+Check((await SePayPost(ambiguous)).IsSuccessStatusCode, "SePay multiple payment references not guessed");
+var partial = SePayData(sepayExpired.GetProperty("paymentReference").GetString()![..20], 93005);
+Check((await SePayPost(partial)).IsSuccessStatusCode, "SePay partial payment code not matched");
+using (var scope = app.Services.CreateScope()) {
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Check((await db.Set<SePayWebhookReceipt>().FindAsync(93001L))!.Outcome == "RejectedState" &&
+        (await db.Set<SePayWebhookReceipt>().FindAsync(93002L))!.Outcome == "RejectedState", "SePay cancelled and expired payments rejected durably");
+    Check((await db.Set<SePayWebhookReceipt>().FindAsync(93003L))!.Outcome == "Unmatched" &&
+        (await db.Set<SePayWebhookReceipt>().FindAsync(93004L))!.Outcome == "AmbiguousReference" &&
+        (await db.Set<SePayWebhookReceipt>().FindAsync(93005L))!.Outcome == "Unmatched", "SePay strict reference matching outcomes");
+    Check((await db.Invoices.FindAsync(sepayCancelledId))!.Status == InvoiceStatus.Cancelled &&
+        (await db.Invoices.FindAsync(sepayExpiredId))!.Status == InvoiceStatus.Pending, "SePay late callback cannot change closed invoice state");
+}
+// FIX SEPAY: chỉ Content cũng đủ (Code có thể null); referenceCode ngân hàng không dùng làm mã invoice.
+var contentOnlyCheckout = await SePayCheckout();
+var contentOnly = SePayData(contentOnlyCheckout.GetProperty("paymentReference").GetString()!, 94001); contentOnly.Code = null;
+Check((await SePayPost(contentOnly)).IsSuccessStatusCode &&
+    (await Json(await http.GetAsync("/api/payments/" + contentOnlyCheckout.GetProperty("paymentId").GetGuid()))).GetProperty("status").GetInt32() == 2, "SePay content-only code activates correct invoice");
+var sepaySnapshot = await SePayCheckout();
+builder.Configuration["SePay:AccountNumber"] = "222222222222";
+var snapshotDetail = await Json(await http.GetAsync("/api/payments/" + sepaySnapshot.GetProperty("paymentId").GetGuid()));
+Check(snapshotDetail.GetProperty("qrCodeUrl").GetString() == sepaySnapshot.GetProperty("qrCodeUrl").GetString() &&
+    snapshotDetail.GetProperty("bankAccountNumber").GetString() == "000000000000", "SePay existing invoice bank instructions immutable after config change");
+Check((await SePayPost(SePayData(sepaySnapshot.GetProperty("paymentReference").GetString()!, 94002))).IsSuccessStatusCode &&
+    (await Json(await http.GetAsync("/api/payments/" + sepaySnapshot.GetProperty("paymentId").GetGuid()))).GetProperty("status").GetInt32() == 2, "SePay old invoice settles against original receiver snapshot");
+Login(otherAccount);
+Check((await http.GetAsync($"/api/payments/{sepayPaymentId}")).StatusCode == HttpStatusCode.Forbidden, "SePay bank instructions still owner-scoped");
+using (var schema = new AppDbContextFactory().CreateDbContext(Array.Empty<string>())) {
+    Check(!schema.Database.HasPendingModelChanges(), "SePay snapshot matches model");
+    var script = schema.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>().GenerateScript("20261027054012_MembershipEligibilityCheckInsAndTrainingSessions");
+    Check(script.Contains("sepay_webhook_receipt") && script.Contains("PaymentReference"), "SePay additive SQL migration generated without DB access");
+    Check(schema.Set<SePayWebhookReceipt>().Where(x => x.Id == 92001).ToQueryString().Contains("sepay_webhook_receipt"), "SePay PostgreSQL dedup query compiles");
+    var eventPk = schema.Model.FindEntityType(typeof(SePayWebhookReceipt))!.FindPrimaryKey()!;
+    Check(eventPk.Properties.Single().ValueGenerated == Microsoft.EntityFrameworkCore.Metadata.ValueGenerated.Never, "SePay external event ID never auto-generated");
 }
 Console.WriteLine($"RESULT {passed} checks passed");
 await app.StopAsync();

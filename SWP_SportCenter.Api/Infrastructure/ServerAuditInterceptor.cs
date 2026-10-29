@@ -88,7 +88,9 @@ public sealed class ServerAuditInterceptor(IHttpContextAccessor http) : SaveChan
             }
 
             // FIX B40: không tạo dòng Modified rỗng (vd. chỉ password bị loại vì nhạy cảm).
-            if (entry.State == EntityState.Modified && changedFieldsList.Count == 0) continue;
+            // CODE CŨ: chỉ bỏ khi không có trường đổi; UpdatedAt đơn lẻ vẫn sinh log rác.
+            // FIX B40: timestamp kỹ thuật không phải thao tác nghiệp vụ.
+            if (entry.State == EntityState.Modified && changedFieldsList.All(x => x == "UpdatedAt")) continue;
             var auditPayload = new
             {
                 entityId = id,

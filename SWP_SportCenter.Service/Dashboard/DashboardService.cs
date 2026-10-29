@@ -34,6 +34,8 @@ public class DashboardService : IDashboardService
                 Year = g.Key.Year,
                 Month = g.Key.Month,
                 Revenue = g.Sum(i => i.Amount),
+                MembershipRevenue = g.Where(i => i.Kind != "Class").Sum(i => i.Amount),
+                ClassRevenue = g.Where(i => i.Kind == "Class").Sum(i => i.Amount), // FIX B53
                 InvoiceCount = g.Count()
             })
             .OrderBy(m => m.Year).ThenBy(m => m.Month)

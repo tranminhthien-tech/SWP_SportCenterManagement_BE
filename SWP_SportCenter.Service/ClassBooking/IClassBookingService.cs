@@ -13,5 +13,6 @@ public interface IClassBookingService
     Task<Response.BookingResponse> BookClassAsync(Request.CreateBookingRequest request);
     
     // Học viên hủy đăng ký lớp
-    Task<bool> CancelBookingAsync(Guid bookingId, Guid memberId);
+    // CODE CŨ: Task<bool> CancelBookingAsync(...)
+    Task<Response.CancellationResponse?> CancelBookingAsync(Guid bookingId, Guid memberId); // FIX B56
 }

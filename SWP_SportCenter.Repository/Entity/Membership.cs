@@ -5,6 +5,8 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class Membership: BaseEntity, IAuditableEntity
 {
+    public Guid? UpgradedFromId { get; set; } // FIX B55
+    public Membership? UpgradedFrom { get; set; }
     public Guid MemberId { get; set; }
 
     public Guid PackageId { get; set; }

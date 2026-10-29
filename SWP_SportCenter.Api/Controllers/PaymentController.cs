@@ -11,6 +11,23 @@ namespace SWP_SportCenter.Controllers;
 [Route("api/payments")]
 public class PaymentController : ControllerBase
 {
+    // FIX B53 B55: giữ SePay, không thêm route/khóa MoMo.
+    [AllowAnonymous, HttpGet("options")]
+    public IActionResult Options([FromServices] SWP_SportCenter.Service.Sepay.ISepayService gateway)
+        => gateway.IsEnabled ? Ok(new { provider = "SePay", methods = new[] { 2 }, holdMinutes = 15, upgrade = true })
+            : StatusCode(503, new { message = "SePay chưa được bật." });
+    [Authorize(Policy = JwtExtensions.MemberPolicy), HttpPost("class-checkout")]
+    public async Task<IActionResult> ClassCheckout(Request.ClassCheckoutRequest request, [FromServices] ClassCommerceService commerce)
+        => Ok(await commerce.ClassCheckoutAsync(request));
+    [Authorize(Policy = JwtExtensions.MemberPolicy), HttpPost("upgrade-checkout")]
+    public async Task<IActionResult> Upgrade(Request.UpgradeCheckoutRequest request, [FromServices] ClassCommerceService commerce)
+        => Ok(await commerce.UpgradeAsync(request));
+    [Authorize(Policy = JwtExtensions.MemberPolicy), HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid id, [FromServices] ClassCommerceService commerce)
+    { await commerce.CancelPaymentAsync(id); return Ok(new { message = "Đã hủy đơn và trả chỗ nếu có." }); }
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy), HttpPost("{id:guid}/refund-confirm")]
+    public async Task<IActionResult> Refund(Guid id, Request.ConfirmRefundRequest request, [FromServices] ClassCommerceService commerce)
+    { await commerce.ConfirmRefundAsync(id, request); return Ok(new { message = "Đã ghi nhận xác nhận hoàn tiền thực tế." }); }
     private readonly IPaymentService _paymentService;
 
     public PaymentController(IPaymentService paymentService)
@@ -42,7 +59,8 @@ public class PaymentController : ControllerBase
     // FIX B38: Cổng thanh toán hoặc Webhook xác nhận giao dịch thành công
     // CODE CŨ: [AllowAnonymous]
     // FIX B39: đây là xác nhận thủ công nội bộ, không phải IPN cổng thật.
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58: xác nhận thu chỉ cho lễ tân.
     [HttpPost("{paymentId:guid}/confirm")]
     public async Task<IActionResult> Confirm(Guid paymentId)
     {
@@ -63,6 +81,7 @@ public class PaymentController : ControllerBase
         var delimiter = returnUrl.Contains("?") ? "&" : "?";
         return Redirect($"{returnUrl}{delimiter}paymentId={paymentId}&status=2");
         */
-        return StatusCode(410, new { message = "Mock gateway đã đóng. Dùng xác nhận POST có quyền staff; chưa tích hợp cổng thật." }); // FIX B39
+        // CODE CŨ: thông báo chưa tích hợp cổng thật.
+        return StatusCode(410, new { message = "Mock gateway đã đóng. Chuyển khoản dùng QR SePay khi đã cấu hình; xác nhận thủ công chỉ dành cho staff." }); // FIX SEPAY
     }
 }

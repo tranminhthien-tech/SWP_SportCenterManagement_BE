@@ -17,7 +17,8 @@ public class Service: IService
         if (cls == null) throw new KeyNotFoundException("Không tìm thấy lớp học.");
         if (cls.CoachId != coachId) throw new UnauthorizedAccessException("Bạn chỉ được tạo kế hoạch cho lớp mình dạy.");
         var ids = await _dbContext.ClassBookings.Where(b => b.ClassId == classId && !b.IsDeleted &&
-                b.Status != Repository.Enum.BookingStatus.Cancelled && !b.Member.IsDeleted && !b.Member.Account.IsDeleted &&
+                // CODE CŨ: Status != Cancelled, vô tình gồm hold chưa trả tiền.
+                (b.Status == Repository.Enum.BookingStatus.Booked || b.Status == Repository.Enum.BookingStatus.Attended) && !b.Member.IsDeleted && !b.Member.Account.IsDeleted && // FIX B53
                 b.Member.Account.Role == Repository.Enum.AccountRole.Member && b.Member.Account.Status == Repository.Enum.AccountStatus.Active)
             .Select(b => b.MemberId).Distinct().ToListAsync();
         if (ids.Count == 0) throw new ArgumentException("Lớp chưa có học viên đang đăng ký.");
