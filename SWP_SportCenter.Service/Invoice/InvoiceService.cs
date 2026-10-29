@@ -26,15 +26,20 @@ public class InvoiceService : IInvoiceService
         return await _context.Invoices
             .AsNoTracking()
             .Include(i => i.Receptionist)
-            .Include(i => i.Membership).ThenInclude(mm => mm.Member)
-            .Include(i => i.Membership).ThenInclude(mm => mm.Package)
+            .Include(i => i.Membership!).ThenInclude(mm => mm.Member)
+            .Include(i => i.Membership!).ThenInclude(mm => mm.Package)
             .Select(i => new Response.InvoiceResponse
             {
                 Id = i.Id,
                 ReceptionistId = i.ReceptionistId,
                 ReceptionistName = i.Receptionist != null ? i.Receptionist.FullName : string.Empty,
                 MemberMembershipId = i.MemberMembershipId,
-                MemberName = i.Membership != null && i.Membership.Member != null ? i.Membership.Member.FullName : string.Empty,
+                ClassBookingId = i.ClassBookingId, ClassId = i.ClassBooking != null ? i.ClassBooking.ClassId : null,
+                ClassName = i.ClassBooking != null ? i.ClassBooking.Class.ClassName : null, Kind = i.Kind,
+                OriginalAmount = i.OriginalAmount, DiscountPercent = i.DiscountPercent, CreditAmount = i.CreditAmount,
+                RefundPending = i.RefundRequestedAt != null && i.RefundedAt == null, // FIX B53 B55 B56
+                // CODE CŨ: hóa đơn lớp trả rỗng tên học viên.
+                MemberName = i.Membership != null ? i.Membership.Member.FullName : i.ClassBooking != null ? i.ClassBooking.Member.FullName : string.Empty, // FIX B53
                 PackageName = i.Membership != null && i.Membership.Package != null ? i.Membership.Package.PackageName : string.Empty,
                 Amount = i.Amount,
                 PaymentMethod = i.PaymentMethod,
@@ -48,9 +53,11 @@ public class InvoiceService : IInvoiceService
     {
         var invoice = await _context.Invoices
             .AsNoTracking()
+            .Include(i => i.ClassBooking!).ThenInclude(b => b.Class) // FIX B53
+            .Include(i => i.ClassBooking!).ThenInclude(b => b.Member)
             .Include(i => i.Receptionist)
-            .Include(i => i.Membership).ThenInclude(mm => mm.Member)
-            .Include(i => i.Membership).ThenInclude(mm => mm.Package)
+            .Include(i => i.Membership!).ThenInclude(mm => mm.Member)
+            .Include(i => i.Membership!).ThenInclude(mm => mm.Package)
             .FirstOrDefaultAsync(i => i.Id == id);
 
         if (invoice == null) return null;
@@ -61,7 +68,11 @@ public class InvoiceService : IInvoiceService
             ReceptionistId = invoice.ReceptionistId,
             ReceptionistName = invoice.Receptionist != null ? invoice.Receptionist.FullName : string.Empty,
             MemberMembershipId = invoice.MemberMembershipId,
-            MemberName = invoice.Membership != null && invoice.Membership.Member != null ? invoice.Membership.Member.FullName : string.Empty,
+            ClassBookingId = invoice.ClassBookingId, ClassId = invoice.ClassBooking != null ? invoice.ClassBooking.ClassId : null,
+            ClassName = invoice.ClassBooking != null ? invoice.ClassBooking.Class.ClassName : null, Kind = invoice.Kind,
+            OriginalAmount = invoice.OriginalAmount, DiscountPercent = invoice.DiscountPercent, CreditAmount = invoice.CreditAmount,
+            RefundPending = invoice.RefundRequestedAt != null && invoice.RefundedAt == null, // FIX B53 B55 B56
+            MemberName = invoice.Membership != null ? invoice.Membership.Member.FullName : invoice.ClassBooking != null ? invoice.ClassBooking.Member.FullName : string.Empty, // FIX B53
             PackageName = invoice.Membership != null && invoice.Membership.Package != null ? invoice.Membership.Package.PackageName : string.Empty,
             Amount = invoice.Amount,
             PaymentMethod = invoice.PaymentMethod,
@@ -72,7 +83,12 @@ public class InvoiceService : IInvoiceService
 
     public async Task<Response.InvoiceResponse> CreateAsync(Request.CreateInvoiceRequest request)
     {
-        var receptionistExists = await _context.Receptionists.AnyAsync(r => r.Id == request.ReceptionistId);
+        // CODE CŨ: tin ReceptionistId từ request, có thể đứng tên nhân viên khác.
+        var accountId = _httpContextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (_httpContextAccessor.HttpContext?.User.IsInRole("Receptionist") != true || !Guid.TryParse(accountId, out var actorId))
+            throw new UnauthorizedAccessException("Chỉ lễ tân được lập hóa đơn.");
+        var receptionistId = await _context.Receptionists.Where(r => r.AccountId == actorId && !r.IsDeleted).Select(r => (Guid?)r.Id).SingleOrDefaultAsync();
+        var receptionistExists = receptionistId.HasValue; // FIX B58
         // CODE CŨ: if (!receptionistExists) throw new Exception("Lễ tân (Receptionist) không tồn tại.");
         // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
         if (!receptionistExists) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lễ tân (Receptionist) không tồn tại.");
@@ -90,7 +106,8 @@ public class InvoiceService : IInvoiceService
 
         var newInvoice = new Repository.Entity.Invoice
         {
-            ReceptionistId = request.ReceptionistId,
+            // CODE CŨ: request.ReceptionistId.
+            ReceptionistId = receptionistId, // FIX B58
             MemberMembershipId = request.MemberMembershipId,
             Amount = request.Amount,
             PaymentMethod = request.PaymentMethod,
@@ -112,6 +129,10 @@ public class InvoiceService : IInvoiceService
     {
         var invoice = await _context.Invoices.FindAsync(id);
         if (invoice == null) return false;
+
+        // FIX B43: đơn online chỉ do webhook/confirm/cancel chính thức xử lý, không đổi trạng thái bằng PUT.
+        if (invoice.PaymentExpiresAt != null || invoice.PaymentReference != null || invoice.Kind is "Class" or "Upgrade")
+            throw new SWP_SportCenter.Service.Exceptions.ConflictException("Không được sửa tay hóa đơn online. Dùng luồng thanh toán hoặc hủy đơn.");
 
         invoice.PaymentMethod = request.PaymentMethod;
         
@@ -135,12 +156,14 @@ public class InvoiceService : IInvoiceService
         if (invoice == null) return false;
 
         // Chặn xóa nếu đã thanh toán
-        if (invoice.Status == InvoiceStatus.Paid)
+        // CODE CŨ: chỉ chặn Paid và hard-delete hóa đơn còn lại.
+        if (invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Refunded || invoice.PaymentExpiresAt != null || invoice.ClassBookingId != null)
             // CODE CŨ: throw new Exception("Không thể xóa hóa đơn đã được thanh toán.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
             throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa hóa đơn đã được thanh toán.");
 
-        _context.Invoices.Remove(invoice);
+        // CODE CŨ: _context.Invoices.Remove(invoice);
+        invoice.IsDeleted = true; // FIX B56: không xóa sổ tài chính.
         await _context.SaveChangesAsync();
         
         return true;
@@ -163,9 +186,9 @@ public class InvoiceService : IInvoiceService
         return await _context.Invoices
             .AsNoTracking()
             .Where(i =>
-                i.Membership != null &&
-                i.Membership.Member != null &&
-                i.Membership.Member.AccountId == accountId)
+                // CODE CŨ: chỉ hóa đơn Membership.
+                (i.Membership != null && i.Membership.Member.AccountId == accountId) ||
+                (i.ClassBooking != null && i.ClassBooking.Member.AccountId == accountId)) // FIX B53
             // FIX B11: hóa đơn mới nhất trước.
             .OrderByDescending(i => i.PaymentDate).ThenByDescending(i => i.CreatedAt)
             .Select(i => new Response.InvoiceResponse
@@ -177,11 +200,15 @@ public class InvoiceService : IInvoiceService
                     : string.Empty,
 
                 MemberMembershipId = i.MemberMembershipId,
+                ClassBookingId = i.ClassBookingId, ClassId = i.ClassBooking != null ? i.ClassBooking.ClassId : null,
+                ClassName = i.ClassBooking != null ? i.ClassBooking.Class.ClassName : null, Kind = i.Kind,
+                OriginalAmount = i.OriginalAmount, DiscountPercent = i.DiscountPercent, CreditAmount = i.CreditAmount,
+                RefundPending = i.RefundRequestedAt != null && i.RefundedAt == null, // FIX B53 B55 B56
 
                 MemberName = i.Membership != null &&
                              i.Membership.Member != null
                     ? i.Membership.Member.FullName
-                    : string.Empty,
+                    : i.ClassBooking != null ? i.ClassBooking.Member.FullName : string.Empty, // FIX B53
 
                 PackageName = i.Membership != null &&
                               i.Membership.Package != null

@@ -5,6 +5,7 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class Class: BaseEntity, IAuditableEntity
 {
+    public decimal Price { get; set; } // FIX B53: học phí cả khóa, 0 = miễn phí.
     public string ClassName { get; set; } = string.Empty;
 
     public Guid CategoryId { get; set; }

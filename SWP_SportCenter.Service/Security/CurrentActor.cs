@@ -14,6 +14,7 @@ public sealed class CurrentActor(AppDbContext db, IHttpContextAccessor http)
     public bool IsCoach => http.HttpContext?.User.IsInRole(nameof(AccountRole.Coach)) == true;
     // FIX B50: kiểm tra nguồn token ở service; middleware còn đối chiếu role hiện tại trong DB.
     public bool IsManager => http.HttpContext?.User.IsInRole(nameof(AccountRole.CenterManager)) == true;
+    public bool IsReceptionist => http.HttpContext?.User.IsInRole(nameof(AccountRole.Receptionist)) == true; // FIX B58
     // FIX B39: xác nhận thủ công chỉ dành cho quản lý/lễ tân, kiểm tra cả Service.
     public bool CanConfirmPayment => http.HttpContext?.User.IsInRole("CenterManager") == true ||
         http.HttpContext?.User.IsInRole("Receptionist") == true;

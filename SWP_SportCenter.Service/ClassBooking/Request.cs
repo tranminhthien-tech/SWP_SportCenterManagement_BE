@@ -7,6 +7,7 @@ public class Request
 {
     public class CreateBookingRequest
     {
+        [Range(1, 3)] public int PaymentMethod { get; set; } = 1; // FIX B53: thu tại quầy.
         [Required(ErrorMessage = "Vui lòng cung cấp ID của Học viên")]
         public Guid MemberId { get; set; }
 

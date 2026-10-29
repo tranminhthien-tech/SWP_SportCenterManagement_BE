@@ -34,6 +34,25 @@ Env.Load();
 var aspnetCoreEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
 Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", aspnetCoreEnv);
 var builder = WebApplication.CreateBuilder(args);
+// FIX SEPAY / THAY_THONG_TIN_SEPAY: bind SePay từ env hoặc user-secrets; chưa sửa appsettings.
+// SePay__BankBin, SePay__AccountNumber, SePay__WebhookApiKey, SePay__Enabled; xem README_SEPAY.md.
+builder.Services.Configure<SWP_SportCenter.Service.Sepay.SePayOptions>(
+    builder.Configuration.GetSection(SWP_SportCenter.Service.Sepay.SePayOptions.SectionName));
+builder.Services.AddScoped<SWP_SportCenter.Service.Sepay.ISepayService, SWP_SportCenter.Service.Sepay.SepayService>();
+builder.Services.AddScoped<SWP_SportCenter.Service.Payment.ClassCommerceService>(); // FIX B53 B55 B56
+// FIX B48 / THAY_THONG_TIN_AI: Ai__Enabled, Ai__ApiKey, Ai__Model. Không sửa appsettings đang có của người dùng.
+builder.Services.Configure<SWP_SportCenter.Service.Ai.AiOptions>(builder.Configuration.GetSection("Ai"));
+builder.Services.AddHttpClient<SWP_SportCenter.Service.Ai.IAiClient, SWP_SportCenter.Service.Ai.GeminiClient>(client => client.Timeout = TimeSpan.FromSeconds(25))
+    .RedactLoggedHeaders(new[] { "x-goog-api-key" });
+builder.Services.AddScoped<SWP_SportCenter.Service.Ai.AiService>();
+builder.Services.AddRateLimiter(options => {
+    options.RejectionStatusCode = 429;
+    options.AddPolicy("ai", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
+builder.Services.AddScoped<SWP_SportCenter.Service.Classes.ClassLifecycleService>();
+builder.Services.AddHostedService<SWP_SportCenter.Infrastructure.ClassLifecycleWorker>(); // FIX B56
 // FIX B12: fail fast nếu chưa cấu hình kết nối qua env/user-secrets.
 if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")))
     throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured through environment variables or user-secrets.");
@@ -129,8 +148,10 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrations"))
 app.UseMiddleware<SWP_SportCenter.Middleware.ApiExceptionMiddleware>();
 
 app.UseSwaggerAPI();
+app.UseStaticFiles(); // FIX B48: /ai-chat.html chỉ là trang thử; API vẫn yêu cầu JWT và giới hạn lượt gọi.
 app.UseCors("FrontEnd"); 
 app.UseAuthentication();
+app.UseRateLimiter(); // FIX B48: giới hạn mỗi tài khoản, sau khi nhận diện JWT.
 app.UseAuthorization();
 app.MapControllers();
 

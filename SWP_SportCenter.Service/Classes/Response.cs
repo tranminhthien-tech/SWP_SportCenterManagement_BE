@@ -7,6 +7,7 @@ public class Response
 {
     public class ClassResponse
     {
+        public decimal Price { get; set; } // FIX B53
         public Guid Id { get; set; }
         public string ClassName { get; set; } = string.Empty;
         

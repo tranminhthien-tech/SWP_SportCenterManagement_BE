@@ -11,10 +11,13 @@ namespace SWP_SportCenter.Service.Classes;
 public class ClassService : IClassService
 {
     private readonly AppDbContext _context;
+    private readonly TimeProvider _clock; // FIX B58
 
-    public ClassService(AppDbContext context)
+    // CODE CŨ: ClassService(AppDbContext context)
+    public ClassService(AppDbContext context, TimeProvider? clock = null)
     {
         _context = context;
+        _clock = clock ?? TimeProvider.System;
     }
 
     public async Task<IEnumerable<Response.ClassResponse>> GetAllAsync()
@@ -22,11 +25,13 @@ public class ClassService : IClassService
         // Include Category và Coach để lấy được Tên hiển thị lên giao diện
         return await _context.Classes
             .AsNoTracking()
+            .Where(c => !c.IsDeleted) // FIX B58
             .Include(c => c.Category)
             .Include(c => c.Coach)
             .Select(c => new Response.ClassResponse
             {
                 Id = c.Id,
+                Price = c.Price, // FIX B53
                 ClassName = c.ClassName,
                 CategoryId = c.CategoryId,
                 CategoryName = c.Category != null ? c.Category.CategoryName : string.Empty,
@@ -34,8 +39,9 @@ public class ClassService : IClassService
                 CoachName = c.Coach != null ? c.Coach.FullName : string.Empty,
                 MaxCapacity = c.MaxCapacity,
                 // FIX B14: không tính booking hủy/xóa mềm.
-                CurrentEnrolled = c.ClassBookings.Count(b => !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled),
-                SpotsLeft = Math.Max(0, c.MaxCapacity - c.ClassBookings.Count(b => !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled)),
+                // CODE CŨ: Status != Cancelled đếm cả hold đã hết hạn.
+                CurrentEnrolled = c.ClassBookings.Count(b => !b.IsDeleted && (b.Status == Repository.Enum.BookingStatus.Booked || b.Status == Repository.Enum.BookingStatus.Attended || (b.Status == Repository.Enum.BookingStatus.PendingPayment && b.PaymentExpiresAt > _clock.GetUtcNow()))),
+                SpotsLeft = Math.Max(0, c.MaxCapacity - c.ClassBookings.Count(b => !b.IsDeleted && (b.Status == Repository.Enum.BookingStatus.Booked || b.Status == Repository.Enum.BookingStatus.Attended || (b.Status == Repository.Enum.BookingStatus.PendingPayment && b.PaymentExpiresAt > _clock.GetUtcNow())))), // FIX B53
                 StartDate = c.StartDate,
                 EndDate = c.EndDate,
                 Status = c.Status,
@@ -51,17 +57,20 @@ public class ClassService : IClassService
             .AsNoTracking()
             .Include(c => c.Category)
             .Include(c => c.Coach)
-            .FirstOrDefaultAsync(c => c.Id == id);
+            // CODE CŨ: chỉ lọc ID.
+            .FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted); // FIX B58
 
         if (classEntity == null) return null;
 
         // FIX B14: tính trực tiếp database, không phụ thuộc navigation đã load.
         var enrolled = await _context.ClassBookings.CountAsync(b => b.ClassId == id &&
-            !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled);
+            // CODE CŨ: Status != Cancelled.
+            !b.IsDeleted && (b.Status == Repository.Enum.BookingStatus.Booked || b.Status == Repository.Enum.BookingStatus.Attended || (b.Status == Repository.Enum.BookingStatus.PendingPayment && b.PaymentExpiresAt > _clock.GetUtcNow()))); // FIX B53
 
         return new Response.ClassResponse
         {
             Id = classEntity.Id,
+            Price = classEntity.Price, // FIX B53
             ClassName = classEntity.ClassName,
             CategoryId = classEntity.CategoryId,
             CategoryName = classEntity.Category != null ? classEntity.Category.CategoryName : string.Empty,
@@ -91,6 +100,7 @@ public class ClassService : IClassService
         var newClass = new Class
         {
             ClassName = request.ClassName,
+            Price = request.Price, // FIX B53
             CategoryId = request.CategoryId,
             CoachId = request.CoachId,
             MaxCapacity = request.MaxCapacity,
@@ -128,6 +138,7 @@ public class ClassService : IClassService
             request.CoachId);
         
         classEntity.ClassName = request.ClassName;
+        classEntity.Price = request.Price; // FIX B53
         classEntity.CategoryId = request.CategoryId;
         classEntity.CoachId = request.CoachId;
         classEntity.MaxCapacity = request.MaxCapacity;
@@ -143,6 +154,7 @@ public class ClassService : IClassService
         return true;
     }
 
+    /* CODE CŨ B58: chặn mọi lớp có lịch/booking và hard-delete.
     public async Task<bool> DeleteAsync(Guid id)
     {
         var classEntity = await _context.Classes.FindAsync(id);
@@ -164,6 +176,25 @@ public class ClassService : IClassService
 
         return true;
     }
+    */
+    public async Task<bool> DeleteAsync(Guid id)
+    {
+        await using var tx = _context.Database.IsRelational() ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
+        var cls = await _context.Classes.Include(c => c.ClassSessions).FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
+        if (cls == null) return false;
+        if (ClassRules.IsRunning(cls, _clock.GetUtcNow())) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp đang diễn ra nên không xóa được.");
+        // FIX B58: xóa lớp chưa mở thì trả hold và yêu cầu hoàn cho người đã trả, không mất dấu tiền.
+        if (!ClassRules.HasStarted(cls, _clock.GetUtcNow())) {
+            var bookings = await _context.ClassBookings.Include(b => b.Invoice).Where(b => b.ClassId == id && !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled).ToListAsync();
+            foreach (var b in bookings) {
+                b.Status = Repository.Enum.BookingStatus.Cancelled; b.CancelledAt = _clock.GetUtcNow();
+                if (b.Invoice?.Status == Repository.Enum.InvoiceStatus.Pending) b.Invoice.Status = Repository.Enum.InvoiceStatus.Cancelled;
+                if (b.Invoice?.Status == Repository.Enum.InvoiceStatus.Paid && b.Invoice.Amount > 0) b.Invoice.RefundRequestedAt ??= _clock.GetUtcNow();
+            }
+        }
+        cls.IsDeleted = true; // FIX B58: giữ lịch sử tài chính.
+        await _context.SaveChangesAsync(); if (tx != null) await tx.CommitAsync(); return true;
+    }
 
     public async Task<IEnumerable<Response.ClassMemberResponse>> GetMembersByClassIdAsync(Guid classId)
     {
@@ -171,7 +202,8 @@ public class ClassService : IClassService
         // Email được lấy từ Account của Member
         return await _context.ClassBookings
             .AsNoTracking()
-            .Where(cb => cb.ClassId == classId)
+            // CODE CŨ: mọi trạng thái booking, gồm cả chưa trả tiền.
+            .Where(cb => cb.ClassId == classId && !cb.IsDeleted && (cb.Status == Repository.Enum.BookingStatus.Booked || cb.Status == Repository.Enum.BookingStatus.Attended)) // FIX B53
             .Select(cb => new Response.ClassMemberResponse
             {
                 MemberId = cb.MemberId,
@@ -190,7 +222,7 @@ public class ClassService : IClassService
         Guid coachId)
     {
         if (!await _context.SportCategories
-                .AnyAsync(c => c.Id == categoryId))
+                .AnyAsync(c => c.Id == categoryId && !c.IsDeleted)) // FIX B58
         {
             // CODE CŨ: throw new Exception("Bộ môn không tồn tại.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
@@ -198,7 +230,7 @@ public class ClassService : IClassService
         }
 
         if (!await _context.Coaches
-                .AnyAsync(c => c.Id == coachId))
+                .AnyAsync(c => c.Id == coachId && !c.IsDeleted && !c.Account.IsDeleted && c.Account.Role == Repository.Enum.AccountRole.Coach && c.Account.Status == Repository.Enum.AccountStatus.Active)) // FIX B58
         {
             // CODE CŨ: throw new Exception("Huấn luyện viên không tồn tại.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.

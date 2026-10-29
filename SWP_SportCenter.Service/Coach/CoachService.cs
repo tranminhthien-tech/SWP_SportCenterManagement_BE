@@ -230,7 +230,7 @@ public class CoachService : ICoachService
             .AsNoTracking()
             .Include(c => c.Category)
             .Include(c => c.ClassBookings)
-            .Where(c => c.CoachId == coachId)
+            .Where(c => c.CoachId == coachId && !c.IsDeleted) // FIX B58
             .OrderByDescending(c => c.StartDate)
             .Select(c => new Response.CoachClassResponse
             {
@@ -251,7 +251,9 @@ public class CoachService : ICoachService
     {
         return await _context.ClassBookings
             .AsNoTracking()
-            .Where(cb => cb.Class != null && cb.Class.CoachId == coachId)
+            // CODE CŨ: mọi booking trong lớp, gồm cả hold chưa trả tiền.
+            .Where(cb => cb.Class != null && cb.Class.CoachId == coachId && !cb.IsDeleted &&
+                (cb.Status == BookingStatus.Booked || cb.Status == BookingStatus.Attended)) // FIX B53
             .OrderBy(cb => cb.Class!.ClassName)
             .ThenBy(cb => cb.Member!.FullName)
             .Select(cb => new Response.CoachMemberResponse

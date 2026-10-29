@@ -14,15 +14,18 @@ public class ClassBookingService : IClassBookingService
     private readonly SWP_SportCenter.Service.Security.CurrentActor _actor;
     // FIX B23 2026-10-23: clock có thể cố định trong test, production dùng UTC thật.
     private readonly TimeProvider _clock;
+    private readonly Payment.ClassCommerceService _commerce; // FIX B53
 
     // CODE CŨ: constructor chỉ nhận DbContext.
     // FIX B7: lấy MemberId từ danh tính đã xác thực.
     // CODE CŨ: constructor chỉ nhận context và actor.
     // FIX B23: clock tùy chọn giữ tương thích các caller hiện có.
-    public ClassBookingService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor,
+    // CODE CŨ: constructor không có commerce.
+    public ClassBookingService(AppDbContext context, SWP_SportCenter.Service.Security.CurrentActor actor, Payment.ClassCommerceService commerce,
         TimeProvider? clock = null)
     {
         _context = context;
+        _commerce = commerce;
         _actor = actor;
         _clock = clock ?? TimeProvider.System;
     }
@@ -40,6 +43,10 @@ public class ClassBookingService : IClassBookingService
             .Select(cb => new Response.BookingResponse
             {
                 Id = cb.Id,
+                OriginalPrice = cb.OriginalPrice, DiscountPercent = cb.DiscountPercent, Price = cb.Price, InvoiceId = cb.Invoice != null ? cb.Invoice.Id : null,
+                PaymentMethod = cb.Invoice != null ? (int?)cb.Invoice.PaymentMethod : null, PaymentExpiresAt = cb.PaymentExpiresAt,
+                CancelledAt = cb.CancelledAt, RefundAmount = cb.RefundAmount,
+                RefundPending = cb.Invoice != null && cb.Invoice.RefundRequestedAt != null && cb.Invoice.RefundedAt == null, // FIX B53 B56
                 MemberId = cb.MemberId,
                 MemberName = cb.Member != null ? cb.Member.FullName : string.Empty,
                 ClassId = cb.ClassId,
@@ -51,6 +58,7 @@ public class ClassBookingService : IClassBookingService
             .ToListAsync();
     }
 
+    /* CODE CŨ B53 B56: mọi lượt đặt cần thẻ, không tính học phí hoặc giữ chỗ thanh toán.
     public async Task<Response.BookingResponse> BookClassAsync(Request.CreateBookingRequest request)
     {
         // FIX B7 B8: Member bỏ qua ID giả mạo; staff được chỉ định MemberId.
@@ -155,7 +163,17 @@ public class ClassBookingService : IClassBookingService
             Status = savedBooking.Status
         };
     }
+    */
+    public async Task<Response.BookingResponse> BookClassAsync(Request.CreateBookingRequest request)
+    {
+        if (!_actor.IsReceptionist) throw new UnauthorizedAccessException("Chỉ lễ tân được đặt và thu tiền tại quầy; Member dùng class-checkout.");
+        await using var tx = _context.Database.IsRelational() ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
+        var invoice = await _commerce.BuildClassAsync(request.MemberId, request.ClassId, request.PaymentMethod, true);
+        await _context.SaveChangesAsync(); if (tx != null) await tx.CommitAsync();
+        return (await GetMemberBookingsAsync(request.MemberId)).Single(b => b.Id == invoice.ClassBooking!.Id);
+    }
 
+    /* CODE CŨ B56: chặn Attended và xóa cứng booking.
     public async Task<bool> CancelBookingAsync(Guid bookingId, Guid memberId)
     {
         // FIX B7: chỉ tìm booking thuộc Member hiện tại, dù URL chứa ID khác.
@@ -177,4 +195,7 @@ public class ClassBookingService : IClassBookingService
 
         return true;
     }
+    */
+    public Task<Response.CancellationResponse?> CancelBookingAsync(Guid bookingId, Guid memberId)
+        => _commerce.CancelBookingAsync(bookingId, memberId); // FIX B56: giữ lịch sử, theo dõi hoàn tiền.
 }

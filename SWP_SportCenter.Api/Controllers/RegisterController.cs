@@ -22,6 +22,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register(
         [FromBody] Request.RegisterRequest request)
     {
+        // FIX B58: khách tự đăng ký vẫn mở; nhân viên đăng ký hộ chỉ cho lễ tân.
+        if (User.Identity?.IsAuthenticated == true && !User.IsInRole("Receptionist"))
+            return Forbid();
         var result = await _authService.RegisterAsync(request);
 
         return Ok(result);

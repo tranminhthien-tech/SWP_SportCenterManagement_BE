@@ -427,10 +427,13 @@ public async Task<Base.Response.PageResult<Response.MembershipResponse>>
         var accountId = GetCurrentAccountId();
         var ownReceptionist = await _dbContext.Receptionists.Where(r => r.AccountId == accountId && !r.IsDeleted)
             .Select(r => (Guid?)r.Id).FirstOrDefaultAsync();
-        var staffId = ownReceptionist ?? receptionistId;
+        // CODE CŨ: var staffId = ownReceptionist ?? receptionistId;
+        // FIX B58: lấy người lập từ token; không mượn hồ sơ lễ tân khác qua query string.
+        var staffId = ownReceptionist;
         if (!staffId.HasValue || !await _dbContext.Receptionists.AnyAsync(r => r.Id == staffId.Value &&
                 !r.IsDeleted && !r.Account.IsDeleted && r.Account.Status == AccountStatus.Active))
-            throw new ArgumentException("Manager cần truyền receptionistId của Lễ tân đang hoạt động để lập hóa đơn.");
+            // CODE CŨ: Manager cần truyền receptionistId của Lễ tân đang hoạt động để lập hóa đơn.
+            throw new ArgumentException("Tài khoản đang đăng nhập chưa có hồ sơ Lễ tân hoạt động.");
         var existingEnd = await _dbContext.Memberships.Where(m => m.MemberId == membership.MemberId &&
             m.PackageId == membership.PackageId && !m.IsDeleted && m.Status == MembershipStatus.Active)
             .MaxAsync(m => (DateTime?)m.EndDate);

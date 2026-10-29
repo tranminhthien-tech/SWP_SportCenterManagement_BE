@@ -5,6 +5,8 @@ namespace SWP_SportCenter.Repository.Entity;
 
 public class MembershipPackage: BaseEntity, IAuditableEntity
 {
+    public int DiscountPercent { get; set; } // FIX B53: giảm học phí mọi môn.
+    public string Benefits { get; set; } = string.Empty;
     
     public string PackageName { get; set; } = string.Empty;
 

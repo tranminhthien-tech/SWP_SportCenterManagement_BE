@@ -56,7 +56,8 @@ public partial class MemberController: ControllerBase // FIX B22
 
     // POST /api/members
     // Tạo Member
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPost]
     [Consumes("application/json")] // FIX B22: giữ JSON, thêm action FormData riêng.
     public async Task<IActionResult> Create(

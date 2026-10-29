@@ -6,6 +6,8 @@ public class Response
 {
     public class MembershipPackageResponse
     {
+        public int DiscountPercent { get; set; } // FIX B53
+        public string Benefits { get; set; } = "";
         public List<Guid> CategoryIds { get; set; } = new(); // FIX B46
         public Guid MembershipPackageId { get; set; }
 

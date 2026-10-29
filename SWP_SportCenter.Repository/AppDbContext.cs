@@ -137,6 +137,54 @@ public class AppDbContext: DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        // FIX B53 B55 B56 B57: tài chính lớp và nâng cấp, giữ quan hệ lịch sử bằng Restrict.
+        modelBuilder.Entity<Class>().Property(x => x.Price).HasPrecision(12, 2);
+        modelBuilder.Entity<MembershipPackage>().Property(x => x.Benefits).HasMaxLength(2000);
+        modelBuilder.Entity<Membership>().HasOne(x => x.UpgradedFrom).WithMany().HasForeignKey(x => x.UpgradedFromId).OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ClassBooking>(b => {
+            b.Property(x => x.OriginalPrice).HasPrecision(12, 2); b.Property(x => x.Price).HasPrecision(12, 2);
+            b.Property(x => x.RefundAmount).HasPrecision(12, 2);
+            b.HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId).OnDelete(DeleteBehavior.Restrict);
+            // CODE CŨ: unique cả booking đã hủy, không đặt lại trước buổi đầu được.
+            b.HasIndex(x => new { x.MemberId, x.ClassId }).IsUnique().HasFilter("\"IsDeleted\" = false AND status <> 3");
+        });
+        modelBuilder.Entity<Invoice>(b => {
+            b.HasOne(x => x.ClassBooking).WithOne(x => x.Invoice).HasForeignKey<Invoice>(x => x.ClassBookingId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.UpgradeFromMembership).WithMany().HasForeignKey(x => x.UpgradeFromMembershipId).OnDelete(DeleteBehavior.Restrict);
+            b.HasOne(x => x.RefundConfirmedByAccount).WithMany().HasForeignKey(x => x.RefundConfirmedByAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Kind).HasMaxLength(20); b.Property(x => x.FromPackageName).HasMaxLength(150);
+            b.Property(x => x.OriginalAmount).HasPrecision(12, 2); b.Property(x => x.CreditAmount).HasPrecision(12, 2);
+            b.Property(x => x.RefundReference).HasMaxLength(200);
+            b.ToTable(t => t.HasCheckConstraint("CK_invoice_subject", "(member_membership_id IS NOT NULL AND \"ClassBookingId\" IS NULL) OR (member_membership_id IS NULL AND \"ClassBookingId\" IS NOT NULL)"));
+        });
+        modelBuilder.Entity<Notification>(b => {
+            b.HasOne(x => x.SenderAccount).WithMany().HasForeignKey(x => x.SenderAccountId).OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.SenderName).HasMaxLength(150); b.Property(x => x.SenderRole).HasMaxLength(32);
+        });
+        // FIX SEPAY: unique mã SWP, event ID chống xử lý lại; không xóa sổ nhận khi xóa hóa đơn.
+        modelBuilder.Entity<Invoice>(b => {
+            b.Property(i => i.PaymentReference).HasMaxLength(35);
+            b.HasIndex(i => i.PaymentReference).IsUnique();
+            b.Property(i => i.SePayBankBin).HasMaxLength(64);
+            b.Property(i => i.SePayAccountNumber).HasMaxLength(64);
+            b.Property(i => i.SePayGateway).HasMaxLength(100);
+            b.Property(i => i.SePayQrCodeUrl).HasMaxLength(1200);
+        });
+        modelBuilder.Entity<SePayWebhookReceipt>(b => {
+            b.ToTable("sepay_webhook_receipt"); b.HasKey(x => x.Id);
+            b.Property(x => x.Id).ValueGeneratedNever();
+            b.Property(x => x.TransferAmount).HasPrecision(18, 2);
+            b.Property(x => x.AccountNumber).HasMaxLength(64);
+            b.Property(x => x.SubAccount).HasMaxLength(64);
+            b.Property(x => x.Gateway).HasMaxLength(100);
+            b.Property(x => x.BankReferenceCode).HasMaxLength(100);
+            b.Property(x => x.BankTransactionDate).HasMaxLength(64);
+            b.Property(x => x.Content).HasMaxLength(2000);
+            b.Property(x => x.PayloadHash).HasMaxLength(64);
+            b.Property(x => x.Outcome).HasMaxLength(40);
+            b.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => x.ReceivedAt); b.HasIndex(x => x.Outcome);
+        });
         // FIX B51: giữ buổi đang được kết quả tham chiếu, không xóa dây chuyền lịch sử.
         modelBuilder.Entity<TrainingResult>().HasOne(r => r.Session).WithMany()
             .HasForeignKey(r => r.SessionId).OnDelete(DeleteBehavior.Restrict);
@@ -620,7 +668,8 @@ public class AppDbContext: DbContext
 
             builder.Property(x => x.MemberMembershipId)
                 .HasColumnName("member_membership_id")
-                .IsRequired();
+                // CODE CŨ: .IsRequired();
+                .IsRequired(false); // FIX B53: hóa đơn lớp không có Membership.
 
             builder.Property(x => x.Amount)
                 .HasColumnName("amount")

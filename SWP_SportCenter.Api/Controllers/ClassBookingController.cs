@@ -33,7 +33,8 @@ public class ClassBookingController : ControllerBase
     // Đăng ký tham gia lớp học
     // CODE CŨ: chỉ MemberPolicy.
     // FIX B8: Lễ tân/Manager được đặt hộ học viên.
-    [Authorize(Roles = "Member,Receptionist,CenterManager")]
+    // CODE CŨ: Member,Receptionist,CenterManager.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B53 B58: thu tại quầy.
     [HttpPost]
     public async Task<IActionResult> BookClass(
         [FromBody] Request.CreateBookingRequest request)
@@ -47,7 +48,8 @@ public class ClassBookingController : ControllerBase
     // Hủy đăng ký lớp học
     // CODE CŨ: chỉ MemberPolicy.
     // FIX B8: Lễ tân/Manager được hủy hộ học viên.
-    [Authorize(Roles = "Member,Receptionist,CenterManager")]
+    // CODE CŨ: Member,Receptionist,CenterManager.
+    [Authorize(Roles = "Member,Receptionist")] // FIX B56 B58
     [HttpDelete("{bookingId:guid}/member/{memberId:guid}")]
     public async Task<IActionResult> CancelBooking(
         Guid bookingId,
@@ -57,7 +59,7 @@ public class ClassBookingController : ControllerBase
             bookingId,
             memberId);
 
-        if (!result)
+        if (result == null)
         {
             return NotFound(new
             {
@@ -65,6 +67,7 @@ public class ClassBookingController : ControllerBase
             });
         }
 
-        return NoContent();
+        // CODE CŨ: NoContent().
+        return Ok(result); // FIX B56: FE biết hoàn tiền hay đang chờ lễ tân thực trả.
     }
 }

@@ -43,7 +43,8 @@ public class InvoiceController : ControllerBase
 
     // POST: api/invoices
     // Tạo hóa đơn mới
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] Request.CreateInvoiceRequest request)
@@ -55,7 +56,8 @@ public class InvoiceController : ControllerBase
 
     // PUT: api/invoices/{id}
     // Cập nhật hóa đơn
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -71,7 +73,8 @@ public class InvoiceController : ControllerBase
 
     // DELETE: api/invoices/{id}
     // Xóa hóa đơn
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
+    // CODE CŨ: ManagerOrReceptionistPolicy.
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B58
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
@@ -98,8 +101,8 @@ public class InvoiceController : ControllerBase
 
 // GET: api/invoices/{id}/export
 // Lấy thông tin hóa đơn để xem / xuất hóa đơn
-    [Authorize(Policy = JwtExtensions.ManagerOrReceptionistPolicy)]
-    [HttpGet("invoices/{id:guid}/export")]
+    // CODE CŨ: ManagerOrReceptionistPolicy và [HttpGet("invoices/{id:guid}/export")].
+    [Authorize(Policy = JwtExtensions.ReceptionistPolicy)] // FIX B11 B58: bỏ route sai cũ.
     // FIX B11: route export đúng tiền tố, giữ route cũ tương thích.
     [HttpGet("{id:guid}/export")]
     public async Task<IActionResult> ExportInvoice(Guid id)

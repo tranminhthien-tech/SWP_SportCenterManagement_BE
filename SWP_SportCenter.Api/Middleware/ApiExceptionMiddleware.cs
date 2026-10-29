@@ -17,6 +17,11 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             {
                 BusinessException or ArgumentException or System.ComponentModel.DataAnnotations.ValidationException => 400,
                 ConflictException => 409,
+                PendingPaymentException => 409, // FIX B53 B55
+                // FIX SEPAY: cấu hình chưa sẵn sàng trả 503, không log/lộ API Key hoặc trả Paid giả.
+                SWP_SportCenter.Service.Sepay.SePayUnavailableException => 503,
+                SWP_SportCenter.Service.Ai.AiUnavailableException => 503, // FIX B48
+                SWP_SportCenter.Service.Ai.AiProviderException => 502,
                 // FIX B22: lỗi dịch vụ ảnh ngoài trả 502 JSON, không xuất stack/provider secret.
                 HttpRequestException => 502,
                 UnauthorizedAccessException => context.User.Identity?.IsAuthenticated == true ? 403 : 401,
@@ -35,6 +40,7 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             context.Response.StatusCode = status;
             var problem = new ProblemDetails { Status = status, Title = message, Detail = message };
             problem.Extensions["message"] = message;
+            if (ex is PendingPaymentException pending) problem.Extensions["paymentId"] = pending.PaymentId; // FIX B53 B55
             problem.Extensions["traceId"] = context.TraceIdentifier;
             context.Response.ContentType = "application/problem+json";
             await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(problem,

@@ -12,12 +12,15 @@ public sealed class PaymentExpirationService(AppDbContext db, TimeProvider clock
         await using var tx = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, ct) : null;
         var now = clock.GetUtcNow();
-        var rows = await db.Invoices.Include(i => i.Membership).Where(i => !i.IsDeleted &&
+        // CODE CŨ: chỉ Include Membership.
+        var rows = await db.Invoices.Include(i => i.Membership).Include(i => i.ClassBooking).Where(i => !i.IsDeleted &&
             i.Status == InvoiceStatus.Pending && i.PaymentExpiresAt != null && i.PaymentExpiresAt <= now)
             .OrderBy(i => i.PaymentExpiresAt).Take(200).ToListAsync(ct);
         foreach (var row in rows) {
             row.Status = InvoiceStatus.Cancelled;
-            if (row.Membership.Status == MembershipStatus.Inactive) row.Membership.Status = MembershipStatus.Cancelled;
+            row.WasExpired = true; // FIX B53 B55: không nhầm user hủy với hết hạn.
+            if (row.Membership?.Status == MembershipStatus.Inactive) row.Membership.Status = MembershipStatus.Cancelled;
+            if (row.ClassBooking?.Status == BookingStatus.PendingPayment) { row.ClassBooking.Status = BookingStatus.Cancelled; row.ClassBooking.CancelledAt = now; }
         }
         if (rows.Count > 0) await db.SaveChangesAsync(ct);
         if (tx != null) await tx.CommitAsync(ct);
