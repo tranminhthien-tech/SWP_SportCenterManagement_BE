@@ -308,6 +308,50 @@ internal static class WorkflowRegression
             Check(script.Contains("CK_invoice_subject") && script.Contains("SenderAccountId") && script.Contains("RefundRequestedAt"), "Migration financial and sender SQL generated offline");
             Check(SWP_SportCenter.Service.Payment.PaymentQueries.Graph(schema).Where(i => i.Id == paymentId).ToQueryString().Contains("class_booking"), "PostgreSQL mixed invoice graph compiles");
         }
+        // FIX B59–B65: regression cho các probe phát hiện ngày 30/10, không gọi Render.
+        Login(receptionistAccount);
+        Check((await http.PostAsync($"/api/payments/{futureOrder.GetProperty("paymentId").GetGuid()}/confirm", null)).StatusCode == HttpStatusCode.Conflict, "B60 staff cannot manually confirm SePay");
+        Login(memberAccount);
+        Check((await Json(await http.GetAsync($"/api/payments/{futureOrder.GetProperty("paymentId").GetGuid()}"))).GetProperty("status").GetInt32() == 1, "B60 rejected confirm leaves payment Pending");
+
+        var draft = new Invoice { Id = Guid.NewGuid(), MemberMembershipId = futureOnly.Id, Kind = "Membership", Amount = 1000, Status = InvoiceStatus.Pending, PaymentMethod = PaymentMethod.Cash };
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(draft); await db.SaveChangesAsync(); }
+        Login(receptionistAccount);
+        Check((await http.DeleteAsync($"/api/invoices/{draft.Id}")).IsSuccessStatusCode, "B65 pending counter draft deleted");
+        Check((await http.GetAsync($"/api/invoices/{draft.Id}")).StatusCode == HttpStatusCode.NotFound, "B65 deleted invoice detail 404");
+        Check(!(await http.GetStringAsync("/api/invoices")).Contains(draft.Id.ToString()), "B65 deleted invoice absent from active list");
+        Check((await http.DeleteAsync($"/api/invoices/{draft.Id}")).StatusCode == HttpStatusCode.NotFound, "B65 repeat delete not false success");
+        Login(memberAccount);
+        Check(!(await http.GetStringAsync("/api/members/me/invoices")).Contains(draft.Id.ToString()), "B65 deleted invoice absent from own history");
+
+        var expiredCard = new Membership { Id = Guid.NewGuid(), MemberId = quotaMember.Id, PackageId = month.Id, StartDate = today, EndDate = today.AddDays(29), Status = MembershipStatus.Inactive };
+        var expiredInvoice = new Invoice { Id = Guid.NewGuid(), Membership = expiredCard, Amount = 800000, Kind = "Membership", Status = InvoiceStatus.Pending, PaymentMethod = PaymentMethod.BankTransfer, PaymentExpiresAt = bookingNow.AddSeconds(-1), PaymentReference = "SWP" + Guid.NewGuid().ToString("N") };
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(expiredInvoice); await db.SaveChangesAsync(); }
+        Login(quotaAccount);
+        Check((await Json(await http.GetAsync($"/api/payments/{expiredInvoice.Id}"))).GetProperty("status").GetInt32() == 5, "B59 read returns Expired");
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            Check((await db.Invoices.FindAsync(expiredInvoice.Id))!.Status == InvoiceStatus.Cancelled && (await db.Memberships.FindAsync(expiredCard.Id))!.Status == MembershipStatus.Cancelled, "B59 payment read persists invoice and membership expiration together"); }
+
+        Login(coachAccount);
+        Check((await http.PostAsJsonAsync("/api/training-plans", new { coachId = coach.Id, classId = counterClass.Id, memberId = cardMember.Id, title = "Invalid student", createdDate = today })).StatusCode == HttpStatusCode.BadRequest, "B62 single plan rejects unbooked member");
+        Login(otherCoachAccount);
+        Check((await http.PostAsJsonAsync("/api/training-plans", new { coachId = otherCoach.Id, classId = counterClass.Id, memberId = member.Id, title = "Wrong class", createdDate = today })).StatusCode == HttpStatusCode.Forbidden, "B62 single plan rejects other coach class");
+        Login(coachAccount);
+        var validPlan = await http.PostAsJsonAsync("/api/training-plans", new { coachId = coach.Id, classId = counterClass.Id, memberId = member.Id, title = "Valid student", createdDate = today });
+        Check(validPlan.IsSuccessStatusCode, "B62 valid single plan still works");
+        var planId = (await Json(validPlan)).GetProperty("trainingPlanId").GetGuid();
+        var resultRecord = new TrainingResult { Id = Guid.NewGuid(), PlanId = planId, MemberId = member.Id, CoachId = coach.Id, PerformanceScore = 8, EvaluationDate = today };
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(resultRecord); await db.SaveChangesAsync(); }
+        Check((await http.GetAsync($"/api/training-plans/{planId}")).IsSuccessStatusCode && (await http.GetAsync($"/api/training-results/{resultRecord.Id}")).IsSuccessStatusCode, "B61 owning coach reads both details");
+        Login(otherCoachAccount);
+        Check((await http.GetAsync($"/api/training-plans/{planId}")).StatusCode == HttpStatusCode.NotFound, "B61 other coach plan detail 404");
+        Check((await http.GetAsync($"/api/training-results/{resultRecord.Id}")).StatusCode == HttpStatusCode.NotFound, "B61 other coach result detail 404");
+        Login(receptionistAccount);
+        using (var multipart = new MultipartFormDataContent()) {
+            var bytes = new ByteArrayContent(new byte[6 * 1024 * 1024]); bytes.Headers.ContentType = new("image/png"); multipart.Add(bytes, "file", "large.png");
+            var rejected = await http.PostAsync("/api/media/images", multipart);
+            Check(rejected.StatusCode == HttpStatusCode.RequestEntityTooLarge && rejected.Content.Headers.ContentType?.MediaType?.Contains("json") == true, "B64 6 MiB image rejected as JSON 413 before provider");
+        }
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }

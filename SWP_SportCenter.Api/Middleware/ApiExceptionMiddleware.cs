@@ -15,6 +15,7 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
         {
             var status = ex switch
             {
+                BadHttpRequestException { StatusCode: 413 } => 413, // FIX B64: body quá lớn không thành gateway/provider 502.
                 BusinessException or ArgumentException or System.ComponentModel.DataAnnotations.ValidationException => 400,
                 ConflictException => 409,
                 PendingPaymentException => 409, // FIX B53 B55
