@@ -24,6 +24,7 @@ public class InvoiceService : IInvoiceService
     public async Task<IEnumerable<Response.InvoiceResponse>> GetAllAsync()
     {
         return await _context.Invoices
+            .Where(i => !i.IsDeleted) // FIX B65: ẩn hóa đơn xóa mềm.
             .AsNoTracking()
             .Include(i => i.Receptionist)
             .Include(i => i.Membership!).ThenInclude(mm => mm.Member)
@@ -58,7 +59,8 @@ public class InvoiceService : IInvoiceService
             .Include(i => i.Receptionist)
             .Include(i => i.Membership!).ThenInclude(mm => mm.Member)
             .Include(i => i.Membership!).ThenInclude(mm => mm.Package)
-            .FirstOrDefaultAsync(i => i.Id == id);
+            // CODE CŨ: .FirstOrDefaultAsync(i => i.Id == id);
+            .FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted); // FIX B65
 
         if (invoice == null) return null;
 
@@ -127,7 +129,8 @@ public class InvoiceService : IInvoiceService
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateInvoiceRequest request)
     {
-        var invoice = await _context.Invoices.FindAsync(id);
+        // CODE CŨ: FindAsync(id) vẫn sửa được hóa đơn đã xóa.
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted); // FIX B65
         if (invoice == null) return false;
 
         // FIX B43: đơn online chỉ do webhook/confirm/cancel chính thức xử lý, không đổi trạng thái bằng PUT.
@@ -152,15 +155,23 @@ public class InvoiceService : IInvoiceService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var invoice = await _context.Invoices.FindAsync(id);
+        // CODE CŨ: FindAsync(id), không xét IsDeleted.
+        var invoice = await _context.Invoices.FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted); // FIX B65
         if (invoice == null) return false;
 
         // Chặn xóa nếu đã thanh toán
         // CODE CŨ: chỉ chặn Paid và hard-delete hóa đơn còn lại.
+        /* CODE CŨ B65: mọi trạng thái bị chặn dùng cùng câu đã thanh toán.
         if (invoice.Status is InvoiceStatus.Paid or InvoiceStatus.Refunded || invoice.PaymentExpiresAt != null || invoice.ClassBookingId != null)
             // CODE CŨ: throw new Exception("Không thể xóa hóa đơn đã được thanh toán.");
             // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
             throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không thể xóa hóa đơn đã được thanh toán.");
+        */
+        // FIX B65: chỉ xóa nháp quầy Pending; đơn online dùng cancel, lịch sử giữ nguyên.
+        if (invoice.Status != InvoiceStatus.Pending)
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException($"Chỉ xóa được hóa đơn chờ thanh toán tại quầy. Trạng thái hiện tại: {invoice.Status}.");
+        if (invoice.PaymentExpiresAt != null || invoice.PaymentReference != null || invoice.Kind is "Class" or "Upgrade" || invoice.RefundRequestedAt != null)
+            throw new SWP_SportCenter.Service.Exceptions.BusinessException("Không xóa đơn online hoặc hóa đơn hoàn tiền. Hãy dùng luồng hủy và đối soát thanh toán.");
 
         // CODE CŨ: _context.Invoices.Remove(invoice);
         invoice.IsDeleted = true; // FIX B56: không xóa sổ tài chính.
@@ -185,6 +196,7 @@ public class InvoiceService : IInvoiceService
         // Lấy hóa đơn thuộc về Member hiện tại
         return await _context.Invoices
             .AsNoTracking()
+            .Where(i => !i.IsDeleted) // FIX B65: lịch sử cá nhân cũng lọc xóa mềm.
             .Where(i =>
                 // CODE CŨ: chỉ hóa đơn Membership.
                 (i.Membership != null && i.Membership.Member.AccountId == accountId) ||

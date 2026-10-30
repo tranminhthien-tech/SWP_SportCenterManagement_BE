@@ -127,8 +127,10 @@ public class Service: IService
     public async Task<Response.TrainingPlanResponse?> GetByIdAsync(
         Guid id)
     {
+        var coachId = await GetCurrentCoachIdAsync(); // FIX B61: xác định chủ sở hữu từ token.
         var trainingPlan = await _dbContext.TrainingPlans
-            .Where(x => x.Id == id && !x.IsDeleted)
+            // CODE CŨ: .Where(x => x.Id == id && !x.IsDeleted)
+            .Where(x => x.Id == id && !x.IsDeleted && x.CoachId == coachId) // FIX B61: 404 nếu coach khác.
             .Select(x => new Response.TrainingPlanResponse
             {
                 TrainingPlanId = x.Id,
@@ -314,6 +316,13 @@ public class Service: IService
         {
             throw new KeyNotFoundException("Class not found");
         }
+
+        // FIX B62: single phải cùng điều kiện sở hữu/ghi danh như bulk.
+        if (!await _dbContext.Classes.AnyAsync(c => c.Id == request.ClassId && !c.IsDeleted && c.CoachId == coachId))
+            throw new UnauthorizedAccessException("Bạn không phụ trách lớp này.");
+        if (!await _dbContext.ClassBookings.AnyAsync(b => b.ClassId == request.ClassId && b.MemberId == request.MemberId &&
+                !b.IsDeleted && (b.Status == SWP_SportCenter.Repository.Enum.BookingStatus.Booked || b.Status == SWP_SportCenter.Repository.Enum.BookingStatus.Attended)))
+            throw new ArgumentException("Học viên chưa có lượt ghi danh hợp lệ trong lớp này.");
 
         var trainingPlan = new Repository.Entity.TrainingPlan
         {

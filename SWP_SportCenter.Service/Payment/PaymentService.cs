@@ -241,7 +241,9 @@ public class PaymentService(AppDbContext db, CurrentActor actor, Sepay.ISepaySer
                 throw new UnauthorizedAccessException("Bạn chỉ được xem giao dịch của chính mình.");
         }
         else if (!actor.CanConfirmPayment) throw new UnauthorizedAccessException("Không có quyền xem thanh toán.");
-        // GET chỉ đọc; background job xử lý hết hạn.
+        // CODE CŨ: GET chỉ tính status=5 trong DTO, chờ worker 5 phút mới lưu invoice/thẻ.
+        // FIX B59: sau kiểm tra quyền, đồng bộ chính đơn này trong một transaction trước response.
+        await new PaymentExpirationService(db, clock ?? TimeProvider.System).ExpireAsync(paymentId: row.Id, asOf: Now); // FIX B59: cùng snapshot với DTO.
         return Map(row);
     }
     public async Task<Response.PaymentDetailResponse> ConfirmPaymentAsync(Guid paymentId)
@@ -251,6 +253,9 @@ public class PaymentService(AppDbContext db, CurrentActor actor, Sepay.ISepaySer
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
         var row = await Load(paymentId);
+        // FIX B60: QR SePay chỉ nhận settlement qua webhook đã xác thực, không bypass bằng staff confirm.
+        if (row.PaymentReference != null || row.SePayQrCodeUrl != null)
+            throw new ConflictException("Đơn SePay chỉ được xác nhận qua webhook đối soát; không xác nhận thủ công bằng API này.");
         if (row.Status == InvoiceStatus.Paid) return Map(row); // idempotent, không đổi ngày trả.
         /* CODE CŨ:
         if (row.Status != InvoiceStatus.Pending || !row.PaymentExpiresAt.HasValue ||

@@ -14,7 +14,8 @@ public sealed class PaymentExpirationWorker(IServiceScopeFactory scopes, ILogger
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex) { logger.LogError(ex, "Pending payment expiration failed."); }
-            await Task.Delay(TimeSpan.FromMinutes(5), ct);
+            // CODE CŨ: await Task.Delay(TimeSpan.FromMinutes(5), ct);
+            await Task.Delay(TimeSpan.FromSeconds(15), ct); // FIX B59: giảm độ trễ khi chỉ đọc membership/invoice.
         }
     }
 }

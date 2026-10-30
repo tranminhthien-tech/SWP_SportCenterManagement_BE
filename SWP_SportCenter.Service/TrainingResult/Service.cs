@@ -119,8 +119,10 @@ public class Service:IService
     public async Task<Response.TrainingResultResponse?> GetByIdAsync(
         Guid id)
     {
+        var coachId = await GetCurrentCoachIdAsync(); // FIX B61
         var trainingResult = await _dbContext.TrainingResults
-            .Where(x => x.Id == id && !x.IsDeleted)
+            // CODE CŨ: .Where(x => x.Id == id && !x.IsDeleted)
+            .Where(x => x.Id == id && !x.IsDeleted && x.CoachId == coachId) // FIX B61
             .Select(x => new Response.TrainingResultResponse
             {
                 TrainingResultId = x.Id,
