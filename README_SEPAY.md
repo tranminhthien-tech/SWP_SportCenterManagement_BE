@@ -95,6 +95,8 @@ Kiểm tra E2E bằng một giao dịch có ID dương duy nhất trong sandbox/
 - Thiếu/sai API Key trả 401; JWT staff/member không thay thế API Key.
 - Chưa cấu hình/bị tắt trả 503. Body không hợp lệ trả 400.
 - Mã SWP phải đủ 35 ký tự, không match tiền tố/một phần, không dùng LIKE wildcard.
+  FIX 30/10: cho phép khoảng trắng/tab/xuống dòng trong phần 32 ký tự hex do ngân hàng
+  chèn, rồi so khớp chính xác PaymentReference. Không nối Code với Content để dựng mã.
   Nhiều mã trong cùng nội dung bị ghi `AmbiguousReference`, không tự chọn hóa đơn.
 - Số tiền phải **bằng chính xác** giá Invoice, là số nguyên VND; thiếu/dư lưu
   `AmountMismatch`, không đổi hóa đơn sang Paid và không cộng dồn nhiều lần chuyển.
@@ -102,6 +104,9 @@ Kiểm tra E2E bằng một giao dịch có ID dương duy nhất trong sandbox/
 - Hóa đơn đã hủy, hết TTL, thẻ đã kích hoạt/hủy hoặc tài khoản không hoạt động:
   ghi `RejectedState`; không phục hồi đơn đã hủy. Tiền chuyển muộn cần xử lý thủ công.
 - Event ID là khóa chính `sepay_webhook_receipt.Id`. Gửi lại cùng payload là idempotent;
+  FIX 30/10: riêng receipt `Unmatched` và InvoiceId null được thử ghép lại khi nhận đúng
+  cùng ID/payload sau sửa parser. Giữ nguyên ReceivedAt/hash và chỉ cập nhật cùng receipt;
+  đánh giá hạn/trạng thái theo lúc xử lý lại, không dùng giờ cũ để hồi sinh đơn hết hạn.
   cùng ID nhưng payload khác trả 409. Event mới trả cho Invoice đã Paid ghi `AlreadyPaid`,
   không đổi PaymentDate và không gia hạn lại thẻ.
 - Transaction Serializable bảo vệ khi webhook đụng confirm nội bộ/worker hết hạn.
@@ -114,8 +119,8 @@ Kiểm tra E2E bằng một giao dịch có ID dương duy nhất trong sandbox/
   Quản lý đối soát các outcome khác `Paid`; không xóa hóa đơn có receipt tham chiếu.
 - `PaymentDate` là thời điểm server xác nhận; ngày giao dịch gốc được giữ riêng để đối chiếu.
   Không tự lùi ngày hiệu lực thẻ hoặc gia hạn theo dữ liệu webhook.
-- API xác nhận nội bộ vẫn chỉ cho Manager/Receptionist như B39. Webhook không giả mạo
-  user staff để gọi `ConfirmPaymentAsync`. Mock gateway GET cũ vẫn 410, không nhận tiền giả.
+- API confirm nội bộ chỉ Receptionist và từ chối đơn SePay (B60); không dùng để bypass
+  đối soát webhook. Mock gateway GET cũ vẫn 410, không nhận tiền giả.
 
 API Key chỉ đặt trên server/SePay dashboard. Tuyệt đối không đưa vào FE, URL QR,
 JSON checkout hoặc log. Luôn dùng HTTPS; nên chuyển sang HMAC nếu nhóm cần mức bảo vệ cao hơn.
