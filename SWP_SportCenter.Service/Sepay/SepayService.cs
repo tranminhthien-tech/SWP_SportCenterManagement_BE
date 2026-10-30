@@ -82,20 +82,27 @@ public sealed class SepayService(AppDbContext db, IOptionsSnapshot<SePayOptions>
         // FIX SEPAY: cùng isolation với confirm thủ công/expiration, invoice + thẻ + receipt cùng commit.
         await using var tx = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
-        var previous = await db.Set<SePayWebhookReceipt>().AsNoTracking().SingleOrDefaultAsync(r => r.Id == data.Id);
+        // CODE CŨ: AsNoTracking + luôn return khi gặp receipt cũ khiến Unmatched không thể nhận diện lại.
+        var previous = await db.Set<SePayWebhookReceipt>().SingleOrDefaultAsync(r => r.Id == data.Id); // FIX SEPAY: tracked cho retry Unmatched.
         if (previous != null)
         {
             if (previous.PayloadHash != hash) throw new ConflictException("Id webhook đã được ghi nhận với dữ liệu khác.");
-            return true; // retry không thay ngày trả, không gia hạn/kích hoạt lần hai.
+            // CODE CŨ: return true với mọi Outcome, kể cả Unmatched.
+            // FIX SEPAY: chỉ thử ghép lại receipt chưa có invoice và chưa từng settlement, payload phải y hệt.
+            if (previous.Outcome != "Unmatched" || previous.InvoiceId.HasValue) return true;
         }
-        var receipt = new SePayWebhookReceipt { Id = data.Id, TransferAmount = data.TransferAmount,
+        var processingNow = clock.GetUtcNow(); // FIX: không lùi thời gian để kích hoạt đơn đã hết hạn khi gửi lại.
+        // CODE CŨ: luôn new receipt, chỉ nhận lần đầu.
+        var receipt = previous ?? new SePayWebhookReceipt { Id = data.Id, TransferAmount = data.TransferAmount,
             AccountNumber = data.AccountNumber, SubAccount = data.SubAccount, Gateway = data.Gateway,
             BankReferenceCode = data.ReferenceCode, BankTransactionDate = data.TransactionDate, Content = data.Content,
-            PayloadHash = hash, ReceivedAt = clock.GetUtcNow(), Outcome = "Unmatched" };
+            PayloadHash = hash, ReceivedAt = processingNow, Outcome = "Unmatched" };
         // CODE CŨ từ file nhóm: ILike("%" + reference + "%") rồi lấy giao dịch mới nhất.
         // FIX SEPAY: tìm đúng mã đủ 35 ký tự, không match một phần/LIKE wildcard hoặc bank ReferenceCode.
-        var codes = PaymentCode.Matches((data.Code ?? "") + " " + (data.Content ?? ""))
-            .Select(m => m.Value.ToUpperInvariant()).Distinct().ToArray();
+        // CODE CŨ: PaymentCode.Matches((data.Code ?? "") + " " + (data.Content ?? ""))
+        //     .Select(m => m.Value.ToUpperInvariant()).Distinct().ToArray();
+        // FIX SEPAY: SWP + 30 hex + khoảng trắng + 2 hex vẫn là mã đủ, so DB chính xác sau chuẩn hóa.
+        var codes = PaymentReferenceParser.Extract(data.Code, data.Content);
         // CODE CŨ: chỉ Include Membership.Member.Account, hóa đơn lớp gây null.
         var invoice = codes.Length == 1 ? await PaymentQueries.Graph(db)
             .SingleOrDefaultAsync(i => i.PaymentReference == codes[0]) : null;
@@ -112,15 +119,17 @@ public sealed class SepayService(AppDbContext db, IOptionsSnapshot<SePayOptions>
             // FIX SEPAY: tiền không khớp giữ Pending, lưu receipt đối soát; không cộng dồn/hoàn tiền tự động.
             else if (data.TransferAmount != invoice.Amount) receipt.Outcome = "AmountMismatch";
             else if (invoice.Status == InvoiceStatus.Paid) receipt.Outcome = "AlreadyPaid";
-            else if (invoice.PaymentMethod != PaymentMethod.BankTransfer || await PaymentSettlement.RejectionReasonAsync(db, invoice, receipt.ReceivedAt) != null)
+            // CODE CŨ: kiểm tra và Apply bằng receipt.ReceivedAt.
+            else if (invoice.PaymentMethod != PaymentMethod.BankTransfer || await PaymentSettlement.RejectionReasonAsync(db, invoice, processingNow) != null)
                 receipt.Outcome = "RejectedState";
             else
             {
-                PaymentSettlement.Apply(invoice, receipt.ReceivedAt, receptionistId: null, db); // FIX B53 B55 B57
+                PaymentSettlement.Apply(invoice, processingNow, receptionistId: null, db); // FIX SEPAY: chỉ kích hoạt đơn hợp lệ ngay lúc xử lý.
                 receipt.Outcome = "Paid";
             }
         }
-        db.Set<SePayWebhookReceipt>().Add(receipt);
+        // CODE CŨ: db.Set<SePayWebhookReceipt>().Add(receipt);
+        if (previous == null) db.Set<SePayWebhookReceipt>().Add(receipt); // FIX SEPAY: không tạo lại Id đã có.
         await db.SaveChangesAsync();
         if (tx != null) await tx.CommitAsync();
         if (receipt.Outcome != "Paid") logger.LogWarning("SePay receipt {EventId}: {Outcome}; invoice {InvoiceId}. Cần đối soát nếu đã nhận tiền.", receipt.Id, receipt.Outcome, receipt.InvoiceId);

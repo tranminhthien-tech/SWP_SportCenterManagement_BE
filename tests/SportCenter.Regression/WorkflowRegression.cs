@@ -352,6 +352,76 @@ internal static class WorkflowRegression
             var rejected = await http.PostAsync("/api/media/images", multipart);
             Check(rejected.StatusCode == HttpStatusCode.RequestEntityTooLarge && rejected.Content.Headers.ContentType?.MediaType?.Contains("json") == true, "B64 6 MiB image rejected as JSON 413 before provider");
         }
+        // FIX SEPAY: mã ngân hàng chèn space, retry receipt cũ và không bypass đối soát.
+        const string canonical = "SWP8D0D7C0313844457855404F957796EEB";
+        var parsed = SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract("SWP8D0D7C0313844457855404F957796E EB CKN 377757");
+        Check(parsed.SequenceEqual(new[] { canonical }), "SePay real bank split reference reconstructed exactly");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical.ToLowerInvariant()).Single() == canonical, "SePay lowercase canonical normalized");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical, canonical.Insert(20, "\t\r\n")).Length == 1, "SePay whitespace variants deduplicated");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical[..^2] + " CKN 377757").Length == 0, "SePay missing hex not guessed");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical + "F").Length == 0, "SePay extra hex suffix rejected");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract("X" + canonical).Length == 0, "SePay reference embedded in larger word rejected");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical[..^2], canonical[^2..]).Length == 0, "SePay does not stitch Code and Content together");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical.Insert(20, "-")).Length == 0, "SePay punctuation inside code not normalized");
+        Check(SWP_SportCenter.Service.Sepay.PaymentReferenceParser.Extract(canonical, "SWP" + new string('A', 32)).Length == 2, "SePay conflicting complete references remain ambiguous");
+
+        SWP_SportCenter.Service.Sepay.Request.SepayWebhookDto BankPayload(JsonElement purchase) {
+            var reference = purchase.GetProperty("paymentReference").GetString()!;
+            return new() { Id = ++eventId, Content = reference[..33] + " " + reference[33..] + " CKN 377757 - BANK IBFT",
+                TransferAmount = purchase.GetProperty("amount").GetDecimal(), ReferenceCode = "BANK" + eventId,
+                TransactionDate = "2026-10-29 10:00:00", Gateway = "MBBank", TransferType = "in", AccountNumber = "000000000000" };
+        }
+        async Task<HttpResponseMessage> SendBank(SWP_SportCenter.Service.Sepay.Request.SepayWebhookDto body, bool authenticated = true) {
+            using var client = new HttpClient { BaseAddress = http.BaseAddress };
+            if (authenticated) client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", "Apikey test-only-sepay-webhook-key-not-a-production-secret-2026");
+            return await client.PostAsJsonAsync("/api/sepay/webhook", body);
+        }
+        async Task SeedLegacy(SWP_SportCenter.Service.Sepay.Request.SepayWebhookDto body) {
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(body))));
+            using var scope = app.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.Set<SePayWebhookReceipt>().Add(new() { Id = body.Id, Content = body.Content, TransferAmount = body.TransferAmount,
+                AccountNumber = body.AccountNumber, Gateway = body.Gateway, BankReferenceCode = body.ReferenceCode,
+                BankTransactionDate = body.TransactionDate, PayloadHash = hash, ReceivedAt = bookingNow.AddMinutes(-1), Outcome = "Unmatched" });
+            await db.SaveChangesAsync();
+        }
+        var spacedOrder = await ClassCheckout(await NewClass("Split reference"), memberAccount); var spacedBody = BankPayload(spacedOrder);
+        Check((await SendBank(spacedBody, false)).StatusCode == HttpStatusCode.Unauthorized, "SePay split reference still requires webhook API key");
+        Check((await SendBank(spacedBody)).IsSuccessStatusCode, "SePay split reference webhook acknowledged");
+        var settled = await Json(await http.GetAsync($"/api/payments/{spacedOrder.GetProperty("paymentId").GetGuid()}"));
+        Check(settled.GetProperty("status").GetInt32() == 2 && settled.GetProperty("qrCodeUrl").ValueKind == JsonValueKind.Null, "SePay split reference sets Paid and removes QR from status response");
+        using (var scope = app.Services.CreateScope()) { var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<SePayWebhookReceipt>().FindAsync(spacedBody.Id);
+            Check(row!.InvoiceId == spacedOrder.GetProperty("paymentId").GetGuid() && row.Outcome == "Paid", "SePay split reference saves InvoiceId on receipt"); }
+        Check((await SendBank(spacedBody)).IsSuccessStatusCode, "SePay Paid retry remains idempotent");
+        Check((await Json(await http.GetAsync($"/api/payments/{spacedOrder.GetProperty("paymentId").GetGuid()}"))).GetProperty("paidAt").GetString() == settled.GetProperty("paidAt").GetString(), "SePay retry does not change payment date");
+        spacedBody.TransferAmount += 1;
+        Check((await SendBank(spacedBody)).StatusCode == HttpStatusCode.Conflict, "SePay same event changed payload rejected");
+
+        var legacyOrder = await ClassCheckout(await NewClass("Legacy unmatched retry"), memberAccount); var legacyBody = BankPayload(legacyOrder);
+        await SeedLegacy(legacyBody);
+        Check((await SendBank(legacyBody)).IsSuccessStatusCode, "SePay identical legacy Unmatched retry accepted");
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var row = await db.Set<SePayWebhookReceipt>().FindAsync(legacyBody.Id);
+            Check(row!.InvoiceId == legacyOrder.GetProperty("paymentId").GetGuid() && row.Outcome == "Paid" && row.ReceivedAt == bookingNow.AddMinutes(-1), "SePay retry updates same receipt preserves original receive time");
+            Check(await db.Set<SePayWebhookReceipt>().CountAsync(x => x.Id == legacyBody.Id) == 1, "SePay retry creates no duplicate receipt"); }
+
+        var lateOrder = await ClassCheckout(await NewClass("Expired unmatched retry"), memberAccount); var lateBody = BankPayload(lateOrder); await SeedLegacy(lateBody);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var row = (await db.Invoices.FindAsync(lateOrder.GetProperty("paymentId").GetGuid()))!;
+            row.PaymentExpiresAt = bookingNow.AddSeconds(-1); await db.SaveChangesAsync(); }
+        await SendBank(lateBody);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); var row = await db.Set<SePayWebhookReceipt>().FindAsync(lateBody.Id);
+            Check(row!.InvoiceId == lateOrder.GetProperty("paymentId").GetGuid() && row.Outcome == "RejectedState" && (await db.Invoices.FindAsync(row.InvoiceId))!.Status != InvoiceStatus.Paid, "SePay legacy retry links invoice but never resurrects expired payment"); }
+
+        var mismatchOrder = await ClassCheckout(await NewClass("Split wrong amount"), memberAccount); var mismatchBody = BankPayload(mismatchOrder); mismatchBody.TransferAmount -= 1;
+        await SendBank(mismatchBody);
+        using (var scope = app.Services.CreateScope()) { var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<SePayWebhookReceipt>().FindAsync(mismatchBody.Id);
+            Check(row!.InvoiceId == mismatchOrder.GetProperty("paymentId").GetGuid() && row.Outcome == "AmountMismatch", "SePay split reference still enforces exact amount"); }
+        var wrongBankOrder = await ClassCheckout(await NewClass("Split wrong receiver"), memberAccount); var wrongBankBody = BankPayload(wrongBankOrder); wrongBankBody.AccountNumber = "WRONG_ACCOUNT";
+        await SendBank(wrongBankBody);
+        using (var scope = app.Services.CreateScope()) { var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<SePayWebhookReceipt>().FindAsync(wrongBankBody.Id);
+            Check(row!.Outcome == "WrongReceiver", "SePay split reference still enforces receiver"); }
+        var ambiguousBody = BankPayload(wrongBankOrder); ambiguousBody.Code = canonical;
+        await SendBank(ambiguousBody);
+        using (var scope = app.Services.CreateScope()) { var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<SePayWebhookReceipt>().FindAsync(ambiguousBody.Id);
+            Check(row!.Outcome == "AmbiguousReference" && row.InvoiceId == null, "SePay conflicting fields cannot mark an arbitrary invoice Paid"); }
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }

@@ -117,7 +117,8 @@ dotnet build tests/SportCenter.Regression/SportCenter.Regression.csproj --no-res
 dotnet tests/SportCenter.Regression/bin/Debug/net8.0/SportCenter.Regression.dll
 ```
 
-Suite mặc định mới: 104 kiểm tra workflow qua HTTP/InMemory với provider Gemini giả, không gọi
+Suite mặc định cập nhật 30/10: 148 kiểm tra workflow, gồm B59–B65 và mã webhook bị chèn
+khoảng trắng/ghép lại receipt Unmatched. Qua HTTP/InMemory với provider Gemini giả, không gọi
 ngân hàng, AI hoặc Render thật. Có kiểm tra snapshot và SQL/query PostgreSQL offline, KHÔNG coi là
 đã chạy transaction/concurrency PostgreSQL thật. Cần smoke test staging trước production.
 Suite 311 ca hợp đồng cũ vẫn giữ trong Program.cs sau `--legacy-contract` để đối chiếu,
