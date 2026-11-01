@@ -47,6 +47,7 @@ builder.Services.AddHttpClient<SWP_SportCenter.Service.Ai.IAiClient, SWP_SportCe
 builder.Services.AddScoped<SWP_SportCenter.Service.Ai.AiService>();
 builder.Services.AddRateLimiter(options => {
     options.RejectionStatusCode = 429;
+    options.OnRejected = SWP_SportCenter.Infrastructure.AiRateLimitResponse.WriteAsync; // FIX B48: quota trả JSON contract.
     options.AddPolicy("ai", context => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));

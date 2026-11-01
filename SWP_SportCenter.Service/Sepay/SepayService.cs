@@ -71,6 +71,8 @@ public sealed class SepayService(AppDbContext db, IOptionsSnapshot<SePayOptions>
     }
     public async Task<bool> ProcessSePayWebhook(Request.SepayWebhookDto data)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew(); // FIX 01/11: đo phần BE, không suy đoán độ trễ ngân hàng.
+        var serviceStartedAt = clock.GetUtcNow(); // FIX: mốc bắt đầu service, khác ReceivedAt lịch sử khi replay.
         // FIX SEPAY: kiểm tra lại trong service, không cho caller bỏ qua auth ở Controller.
         if (!VerifyWebhookAuthorization(http.HttpContext?.Request.Headers["Authorization"].ToString()))
             throw new UnauthorizedAccessException("Webhook SePay không được xác thực.");
@@ -89,7 +91,11 @@ public sealed class SepayService(AppDbContext db, IOptionsSnapshot<SePayOptions>
             if (previous.PayloadHash != hash) throw new ConflictException("Id webhook đã được ghi nhận với dữ liệu khác.");
             // CODE CŨ: return true với mọi Outcome, kể cả Unmatched.
             // FIX SEPAY: chỉ thử ghép lại receipt chưa có invoice và chưa từng settlement, payload phải y hệt.
-            if (previous.Outcome != "Unmatched" || previous.InvoiceId.HasValue) return true;
+            if (previous.Outcome != "Unmatched" || previous.InvoiceId.HasValue) {
+                logger.LogInformation("SePay retry {EventId}: {Outcome}; invoice {InvoiceId}; backendMs {BackendMs}",
+                    previous.Id, previous.Outcome, previous.InvoiceId, stopwatch.ElapsedMilliseconds); // FIX: không log key/nội dung thô.
+                return true;
+            }
         }
         var processingNow = clock.GetUtcNow(); // FIX: không lùi thời gian để kích hoạt đơn đã hết hạn khi gửi lại.
         // CODE CŨ: luôn new receipt, chỉ nhận lần đầu.
@@ -132,6 +138,9 @@ public sealed class SepayService(AppDbContext db, IOptionsSnapshot<SePayOptions>
         if (previous == null) db.Set<SePayWebhookReceipt>().Add(receipt); // FIX SEPAY: không tạo lại Id đã có.
         await db.SaveChangesAsync();
         if (tx != null) await tx.CommitAsync();
+        // FIX 01/11: Paid được commit trong webhook, KHÔNG đợi worker quét. Log UTC để đối chiếu delivery log.
+        logger.LogInformation("SePay commit {EventId}: {Outcome}; invoice {InvoiceId}; serviceStartedAt {ServiceStartedAt}; receivedAt {ReceivedAt}; committedAt {CommittedAt}; backendMs {BackendMs}",
+            receipt.Id, receipt.Outcome, receipt.InvoiceId, serviceStartedAt, receipt.ReceivedAt, clock.GetUtcNow(), stopwatch.ElapsedMilliseconds);
         if (receipt.Outcome != "Paid") logger.LogWarning("SePay receipt {EventId}: {Outcome}; invoice {InvoiceId}. Cần đối soát nếu đã nhận tiền.", receipt.Id, receipt.Outcome, receipt.InvoiceId);
         return true; // ACK đã ghi nhận, KHÔNG đồng nghĩa invoice đã Paid; FE phải đọc payment status.
     }

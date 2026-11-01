@@ -51,7 +51,9 @@ public class PaymentController : ControllerBase
     [HttpGet("{paymentId:guid}")]
     public async Task<IActionResult> GetById(Guid paymentId)
     {
+        var timer = System.Diagnostics.Stopwatch.StartNew(); // FIX 01/11: FE đo thời gian server riêng với ngân hàng/webhook.
         var result = await _paymentService.GetPaymentAsync(paymentId);
+        Response.Headers["Server-Timing"] = "payment;dur=" + timer.Elapsed.TotalMilliseconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
         return Ok(result);
     }
 
