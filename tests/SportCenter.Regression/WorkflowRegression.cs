@@ -86,6 +86,7 @@ internal static class WorkflowRegression
         builder.Services.AddScoped<IAiClient>(sp => new GeminiClient(new HttpClient(aiHttp, disposeHandler: false), sp.GetRequiredService<IOptionsSnapshot<AiOptions>>()));
         builder.Services.AddScoped<AiService>();
         builder.Services.AddRateLimiter(o => { o.RejectionStatusCode = 429;
+            o.OnRejected = SWP_SportCenter.Infrastructure.AiRateLimitResponse.WriteAsync; // FIX: cùng contract với production.
             o.AddPolicy("ai", c => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(c.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anon",
                 _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })); });
         builder.Configuration["SePay:Enabled"] = "true"; builder.Configuration["SePay:BankBin"] = "970422";
@@ -298,7 +299,8 @@ internal static class WorkflowRegression
         Check(exercises.IsSuccessStatusCode && (await Json(exercises)).GetProperty("suggestions").GetString()!.Length > 0, "B48 owning Coach gets exercise suggestions");
         Check(!aiHttp.LastBody.Contains(cardMember.Phone!) && !aiHttp.LastBody.Contains(cardAccount.Email), "B48 no member email or phone sent to model");
         aiHttp.Status = HttpStatusCode.TooManyRequests;
-        Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" })).StatusCode == HttpStatusCode.BadGateway, "B48 provider error sanitized to 502"); aiHttp.Status = HttpStatusCode.OK;
+        // CODE CŨ: provider quota 429 trả 502 chung.
+        Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" })).StatusCode == HttpStatusCode.ServiceUnavailable, "B48 Gemini quota sanitized to 503"); aiHttp.Status = HttpStatusCode.OK;
         Login(quotaAccount);
         for (int n = 0; n < 10; n++) Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" })).IsSuccessStatusCode, "B48 quota request " + n);
         Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" })).StatusCode == HttpStatusCode.TooManyRequests, "B48 per-account limiter blocks excess AI calls");
@@ -422,6 +424,60 @@ internal static class WorkflowRegression
         await SendBank(ambiguousBody);
         using (var scope = app.Services.CreateScope()) { var row = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Set<SePayWebhookReceipt>().FindAsync(ambiguousBody.Id);
             Check(row!.Outcome == "AmbiguousReference" && row.InvoiceId == null, "SePay conflicting fields cannot mark an arbitrary invoice Paid"); }
+        // FIX B48 01/11: contract Gemini, context live và không cần key thật.
+        var swaggerAI = await Json(await http.GetAsync("/swagger/v1/swagger.json"));
+        var chatResponses = swaggerAI.GetProperty("paths").GetProperty("/api/ai/chat").GetProperty("post").GetProperty("responses");
+        Check(chatResponses.GetProperty("200").GetProperty("content").GetProperty("application/json").GetProperty("schema").GetProperty("$ref").GetString()!.Contains("AiReply"), "B48 Swagger has typed Gemini reply schema");
+        Check(chatResponses.TryGetProperty("503", out _) && chatResponses.TryGetProperty("429", out _), "B48 Swagger documents unavailable and rate limit");
+        http.DefaultRequestHeaders.Authorization = null;
+        Check((await http.GetAsync("/api/ai/options")).StatusCode == HttpStatusCode.Unauthorized, "B48 config metadata requires login");
+        Login(manager);
+        var ready = await Json(await http.GetAsync("/api/ai/options"));
+        Check(ready.GetProperty("provider").GetString() == "Gemini" && ready.GetProperty("configured").GetBoolean() && !ready.GetProperty("providerVerified").GetBoolean(), "B48 configured metadata does not claim provider health");
+        Check(!ready.ToString().Contains("fake-ai-key") && !ready.ToString().Contains("gemini-test"), "B48 config metadata exposes no key or model value");
+        var cfg = new AiOptions { Enabled = true, ApiKey = "local-placeholder", Model = "INVALID" };
+        Check(cfg.ConfigurationIssues().SequenceEqual(new[] { "Ai__Model" }), "B48 reports bad model setting without secret");
+        builder.Configuration["Ai:Enabled"] = "false";
+        var disabled = await Json(await http.GetAsync("/api/ai/options"));
+        Check(!disabled.GetProperty("configured").GetBoolean() && disabled.GetProperty("configurationIssues")[0].GetString() == "Ai__Enabled", "B48 missing config metadata distinguishes disabled");
+        builder.Configuration["Ai:Enabled"] = "true";
+        foreach (var staffAccount in new[] { manager, receptionistAccount, coachAccount }) {
+            Login(staffAccount);
+            Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Các môn hiện có?" })).IsSuccessStatusCode, "B48 authenticated staff chat allowed " + staffAccount.Role);
+        }
+        var aiMemberAccount = Account(AccountRole.Member, "ai_context_owner");
+        var aiMember = new Member { Id = Guid.NewGuid(), Account = aiMemberAccount, FullName = "AI context owner", Phone = "0900000099" };
+        var ownClass = await NewClass("AI_PRIVATE_OWN_SCHEDULE"); var foreignClass = await NewClass("AI_OTHER_MEMBER_SCHEDULE");
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); db.Add(aiMember);
+            db.ClassBookings.AddRange(new ClassBooking { Id = Guid.NewGuid(), MemberId = aiMember.Id, ClassId = ownClass.Id, Status = BookingStatus.Booked },
+                new ClassBooking { Id = Guid.NewGuid(), MemberId = cardMember.Id, ClassId = foreignClass.Id, Status = BookingStatus.Booked }); await db.SaveChangesAsync(); }
+        Login(aiMemberAccount);
+        var contextual = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Tôi học khi nào?", memberId = cardMember.Id,
+            history = new[] { new { role = "user", content = "Các môn?" }, new { role = "assistant", content = "Để mình kiểm tra." } } });
+        Check(contextual.IsSuccessStatusCode, "B48 Gemini chat supports bounded history and live context");
+        using (var requestJson = JsonDocument.Parse(aiHttp.LastBody)) {
+            var system = requestJson.RootElement.GetProperty("systemInstruction").GetProperty("parts")[0].GetProperty("text").GetString()!;
+            var marker = " Dữ liệu hiện tại: "; using var ctx = JsonDocument.Parse(system[(system.LastIndexOf(marker, StringComparison.Ordinal) + marker.Length)..]);
+            Check(ctx.RootElement.GetProperty("Categories").EnumerateArray().Any(v => v.GetString() == "Gym"), "B48 sports catalog injected from current DB");
+            var schedule = ctx.RootElement.GetProperty("PersonalSchedule").EnumerateArray().Select(v => v.GetProperty("ClassName").GetString()).ToArray();
+            Check(schedule.Contains(ownClass.ClassName) && !schedule.Contains(foreignClass.ClassName), "B48 personal schedule uses token not client memberId");
+            Check(requestJson.RootElement.GetProperty("contents")[1].GetProperty("role").GetString() == "model", "B48 assistant history maps to Gemini model role");
+        }
+        Check(!aiHttp.LastBody.Contains(aiMember.Phone!) && !aiHttp.LastBody.Contains(aiMemberAccount.Email), "B48 chat context sends no account email or phone");
+        var normalBody = aiHttp.Body;
+        aiHttp.Body = "{\"candidates\":{}}";
+        var malformed = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
+        Check(malformed.StatusCode == HttpStatusCode.BadGateway && (await Json(malformed)).TryGetProperty("message", out _), "B48 malformed provider schema gives sanitized JSON 502 not 500");
+        aiHttp.Body = normalBody; aiHttp.Status = HttpStatusCode.Forbidden;
+        var rejectedKey = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
+        Check(rejectedKey.StatusCode == HttpStatusCode.ServiceUnavailable && !(await rejectedKey.Content.ReadAsStringAsync()).Contains("fake-ai-key"), "B48 Gemini permission error gives safe 503");
+        aiHttp.Status = HttpStatusCode.OK;
+        Login(quotaAccount);
+        var limitedJson = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
+        Check(limitedJson.StatusCode == HttpStatusCode.TooManyRequests && (await Json(limitedJson)).GetProperty("status").GetInt32() == 429, "B48 local quota has stable problem JSON");
+        Login(memberAccount);
+        var timing = await http.GetAsync($"/api/payments/{spacedOrder.GetProperty("paymentId").GetGuid()}");
+        Check(timing.Headers.TryGetValues("Server-Timing", out var headers) && headers.Single().StartsWith("payment;dur="), "Payment polling exposes backend timing without claiming bank latency");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }
