@@ -75,7 +75,10 @@ Receptionist mới được tạo Member tại quầy, tạo/gia hạn/hủy/ch�
 Manager vẫn đọc và quản lý Account/gói/lớp/báo cáo, không thay cashier.
 Đăng ký tự phục vụ vẫn mở; nhân viên đăng nhập đăng ký hộ chỉ cho Receptionist.
 
-Manager không xóa được lớp đang diễn ra. Xóa mềm lớp chưa mở sẽ hủy hold và yêu cầu hoàn
+FIX B58 chốt ngày 02/11: chỉ xóa trước giờ bắt đầu buổi đầu theo giờ Việt Nam. Scheduled
+có buổi đầu đã qua cũng bị chặn, kể cả buổi đó đã kết thúc hoặc bị xóa mềm. Ongoing và
+Completed không được xóa; Cancelled chỉ được xóa nếu chưa tới giờ bắt đầu buổi đầu.
+Draft/Scheduled chưa có lịch chưa được coi là đã bắt đầu. Xóa mềm lớp chưa mở sẽ hủy hold và yêu cầu hoàn
 các khoản đã thu, giữ lịch sử. Không sửa PUT Invoice online/Class/Upgrade để bỏ qua settlement.
 Route export sai `/api/invoices/invoices/{id}/export` đã bỏ; dùng `/api/invoices/{id}/export`.
 
@@ -117,8 +120,8 @@ dotnet build tests/SportCenter.Regression/SportCenter.Regression.csproj --no-res
 dotnet tests/SportCenter.Regression/bin/Debug/net8.0/SportCenter.Regression.dll
 ```
 
-Suite mặc định cập nhật 30/10: 148 kiểm tra workflow, gồm B59–B65 và mã webhook bị chèn
-khoảng trắng/ghép lại receipt Unmatched. Qua HTTP/InMemory với provider Gemini giả, không gọi
+Suite mặc định cập nhật 02/11: 194 kiểm tra workflow, gồm B59–B65, mã webhook bị chèn
+khoảng trắng/ghép lại receipt Unmatched, Gemini và B58 chặn xóa sau buổi đầu. Qua HTTP/InMemory với provider Gemini giả, không gọi
 ngân hàng, AI hoặc Render thật. Có kiểm tra snapshot và SQL/query PostgreSQL offline, KHÔNG coi là
 đã chạy transaction/concurrency PostgreSQL thật. Cần smoke test staging trước production.
 Suite 311 ca hợp đồng cũ vẫn giữ trong Program.cs sau `--legacy-contract` để đối chiếu,

@@ -475,15 +475,58 @@ internal static class WorkflowRegression
         Login(quotaAccount);
         var limitedJson = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
         Check(limitedJson.StatusCode == HttpStatusCode.TooManyRequests && (await Json(limitedJson)).GetProperty("status").GetInt32() == 429, "B48 local quota has stable problem JSON");
+        // FIX B48 02/11: chỉ dùng key giả, không đưa key người dùng đã lộ vào test/Git.
+        const string opaqueKey = "AQ.synthetic-only.key-format-test_+/=";
+        Check(AiOptions.IsSafeApiKey(opaqueKey), "B48 dotted opaque key accepted without guessing Google format");
+        foreach (var invalidKey in new string?[] { null, "", " ", " key", "key ", "key\r\nInjected: yes", "key\t", "key\0", "key\u007f", "key\u00e9", new string('a',4097) })
+            Check(!AiOptions.IsSafeApiKey(invalidKey), "B48 unsafe empty whitespace control or oversized key rejected");
+        builder.Configuration["Ai:ApiKey"] = opaqueKey;
+        Login(aiMemberAccount);
+        var dottedOptions = await Json(await http.GetAsync("/api/ai/options"));
+        Check(dottedOptions.GetProperty("configured").GetBoolean() && !dottedOptions.ToString().Contains(opaqueKey), "B48 dotted key configured metadata safe");
+        Check((await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" })).IsSuccessStatusCode && aiHttp.LastApiKey == opaqueKey, "B48 dotted key reaches Gemini header unchanged");
+        builder.Configuration["Ai:ApiKey"] = "bad\r\nsecret";
+        var invalidHeaderKey = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
+        Check(invalidHeaderKey.StatusCode == HttpStatusCode.ServiceUnavailable && !(await invalidHeaderKey.Content.ReadAsStringAsync()).Contains("secret"), "B48 invalid header key fails safely before provider");
+        builder.Configuration["Ai:ApiKey"] = "fake-ai-key-for-tests";
         Login(memberAccount);
         var timing = await http.GetAsync($"/api/payments/{spacedOrder.GetProperty("paymentId").GetGuid()}");
         Check(timing.Headers.TryGetValues("Server-Timing", out var headers) && headers.Single().StartsWith("payment;dur="), "Payment polling exposes backend timing without claiming bank latency");
+        // FIX B58 02/11: quy tắc đã chốt chỉ xóa trước buổi đầu, cả khi lớp đã kết thúc/hủy.
+        Login(manager);
+        foreach (var status in new[] { ClassStatus.Scheduled, ClassStatus.Ongoing, ClassStatus.Completed, ClassStatus.Cancelled }) {
+            var pastClass = await NewClass("B58 ended session " + status, 0);
+            using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                (await db.Classes.FindAsync(pastClass.Id))!.Status = status;
+                var session = await db.ClassSessions.SingleAsync(s => s.ClassId == pastClass.Id);
+                session.Date = DateOnly.FromDateTime(today).AddDays(-2); session.StartTime = TimeSpan.FromHours(6.25); session.EndTime = TimeSpan.FromHours(6.5);
+                await db.SaveChangesAsync(); }
+            var denied = await http.DeleteAsync($"/api/classes/{pastClass.Id}");
+            Check(denied.StatusCode == HttpStatusCode.BadRequest && (await Json(denied)).GetProperty("message").GetString()!.Contains("Chỉ được xóa"), "B58 rejects ended first session and clear JSON for " + status);
+            Check((await http.GetAsync($"/api/classes/{pastClass.Id}")).IsSuccessStatusCode, "B58 rejected delete keeps class visible " + status);
+        }
+        var boundaryClass = await NewClass("B58 exact first start", 0);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var session = await db.ClassSessions.SingleAsync(s => s.ClassId == boundaryClass.Id);
+            session.Date = DateOnly.FromDateTime(today); session.StartTime = TimeSpan.FromHours(10); session.EndTime = TimeSpan.FromHours(11);
+            await db.SaveChangesAsync(); }
+        Check((await http.DeleteAsync($"/api/classes/{boundaryClass.Id}")).StatusCode == HttpStatusCode.BadRequest, "B58 exact 10h Vietnam 03h UTC blocks deletion");
+        var historicalClass = await NewClass("B58 soft deleted past session", 0);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var session = await db.ClassSessions.SingleAsync(s => s.ClassId == historicalClass.Id); session.Date = DateOnly.FromDateTime(today).AddDays(-1); session.IsDeleted = true; await db.SaveChangesAsync(); }
+        Check((await http.DeleteAsync($"/api/classes/{historicalClass.Id}")).StatusCode == HttpStatusCode.BadRequest, "B58 hiding past session cannot bypass deletion guard");
+        var futureCancelled = await NewClass("B58 cancelled before first session", 0);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>(); (await db.Classes.FindAsync(futureCancelled.Id))!.Status = ClassStatus.Cancelled; await db.SaveChangesAsync(); }
+        Check((await http.DeleteAsync($"/api/classes/{futureCancelled.Id}")).IsSuccessStatusCode, "B58 cancelled before any first start can soft-delete");
+        var futureScheduled = await NewClass("B58 scheduled before first session", 0);
+        Check((await http.DeleteAsync($"/api/classes/{futureScheduled.Id}")).IsSuccessStatusCode, "B58 future Scheduled class remains deletable");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }
 
 internal sealed class AiStubHandler : HttpMessageHandler
 {
+    public string? LastApiKey; // FIX: provider giả giữ key giả kiểm tra header, không log.
     public string LastBody = "";
     public bool HasKey;
     public int Calls;
@@ -492,6 +535,7 @@ internal sealed class AiStubHandler : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         Calls++; HasKey = request.Headers.Contains("x-goog-api-key"); LastBody = await request.Content!.ReadAsStringAsync(ct);
+        LastApiKey = HasKey ? request.Headers.GetValues("x-goog-api-key").Single() : null;
         if (request.RequestUri!.Host != "generativelanguage.googleapis.com") throw new Exception("Unexpected AI endpoint");
         return new HttpResponseMessage(Status) { Content = new StringContent(Body, System.Text.Encoding.UTF8, "application/json") };
     }

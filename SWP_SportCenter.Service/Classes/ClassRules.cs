@@ -16,6 +16,15 @@ public static class ClassRules
         var last = c.ClassSessions.Where(s => !s.IsDeleted).Select(s => (DateTime?)s.Date.ToDateTime(TimeOnly.MinValue).Add(s.EndTime)).Max();
         return (c.Status == ClassStatus.Ongoing || FirstStart(c) <= LocalNow(now)) && (!last.HasValue || last > LocalNow(now));
     }
+    // FIX B58 02/11: chỉ xóa trước buổi đầu, không cho xóa lịch sử đã học xong/hủy sau khi bắt đầu.
+    public static void EnsureCanDelete(Repository.Entity.Class c, DateTimeOffset now)
+    {
+        // Tính cả buổi xóa mềm để không vượt guard bằng cách ẩn buổi đã diễn ra.
+        var firstRecordedStart = c.ClassSessions.Select(s =>
+            (DateTime?)s.Date.ToDateTime(TimeOnly.MinValue).Add(s.StartTime)).Min();
+        if (c.Status is ClassStatus.Ongoing or ClassStatus.Completed || firstRecordedStart <= LocalNow(now))
+            throw new BusinessException("Lớp đã bắt đầu hoặc đã kết thúc, không được xóa. Chỉ được xóa lớp chưa bắt đầu buổi học đầu tiên.");
+    }
     public static void EnsureBookable(Repository.Entity.Class c, DateTimeOffset now)
     {
         if (HasStarted(c, now)) throw new BusinessException("Lớp đã bắt đầu, không nhận đặt thêm.");

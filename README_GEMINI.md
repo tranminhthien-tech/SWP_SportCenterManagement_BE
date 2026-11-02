@@ -40,6 +40,11 @@ Ví dụ options chưa cấu hình:
 
 `configured: true` chỉ là các biến cục bộ có hình thức hợp lệ, KHÔNG phải đã kiểm chứng
 key/quota/model. `providerVerified` luôn false ở endpoint này: không tốn quota để kiểm tra.
+FIX B48 02/11: key là chuỗi opaque, không áp regex đoán prefix/định dạng Google. Key có
+dấu chấm và ký tự ASCII in được được giữ nguyên trong header. Vẫn chặn key rỗng,
+whitespace/control/CR/LF, ký tự ngoài ASCII và key quá 4096 ký tự; không Trim hoặc sửa key
+âm thầm. Nếu Google từ chối key/quyền/quota thì API vẫn trả 503 đã lọc, không giả thành công.
+Key đã lộ trong ảnh/chat cần được thu hồi và thay trên Render, không dùng làm dữ liệu test.
 Options không trả key hoặc giá trị model. Chỉ cần gọi lúc mở chat, không poll liên tục;
 các request AI được giới hạn 10/phút/tài khoản, bao gồm options.
 
@@ -126,7 +131,9 @@ Không yêu cầu chuyển thêm tiền; đơn B66 cũ 8000đ chưa được đ�
 
 ## Kiểm thử và triển khai
 
-Build thành công, 167 kiểm tra workflow qua với DB InMemory, HTTP Gemini giả. Không gọi Google/SePay thật, không
+Build thành công, 182 kiểm tra workflow qua với DB InMemory, HTTP Gemini giả. Có ca key
+opaque chứa dấu chấm được gửi nguyên vẹn, config metadata không lộ key và CR/LF bị chặn.
+Không gọi Google/SePay thật, không
 login demo Render, không tạo đơn hay giả webhook production, không tiêu quota AI thật.
 Chưa xác minh key/quota và nội dung Gemini thực tế; cần chủ service cấu hình rồi thử bằng
 đúng role. Test một lần cả hai endpoint, không chỉ xem Swagger hoặc options configured.

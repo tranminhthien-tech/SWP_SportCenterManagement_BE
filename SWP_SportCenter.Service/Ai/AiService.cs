@@ -20,9 +20,14 @@ public sealed class AiOptions
     public string[] ConfigurationIssues() => new[] {
         Enabled ? null : "Ai__Enabled",
         // CODE CŨ: chỉ string.IsNullOrWhiteSpace(ApiKey), có thể lọt CR/LF vào HTTP header/log lỗi.
-        Regex.IsMatch(ApiKey ?? "", "^[A-Za-z0-9_-]{1,256}$") ? null : "Ai__ApiKey", // FIX: chặn ký tự header không hợp lệ, không lộ key.
+        // CODE CŨ: Regex.IsMatch(ApiKey ?? "", "^[A-Za-z0-9_-]{1,256}$") ? null : "Ai__ApiKey",
+        IsSafeApiKey(ApiKey) ? null : "Ai__ApiKey", // FIX B48 02/11: dấu chấm không phải lỗi cấu hình.
         Regex.IsMatch(Model ?? "", "^gemini-[a-zA-Z0-9.-]{1,90}$") ? null : "Ai__Model"
     }.Where(x => x != null).Select(x => x!).ToArray();
+    // FIX B48: chỉ kiểm tra an toàn HTTP header, không đoán prefix/định dạng key của Google.
+    // Không Trim/sửa key âm thầm. Google quyết định key/quyền/quota có hợp lệ hay không.
+    public static bool IsSafeApiKey(string? key) => key is { Length: > 0 and <= 4096 } &&
+        key.All(c => c >= '\u0021' && c <= '\u007e'); // Loại whitespace, CR/LF, control và ký tự ngoài ASCII.
     public void RequireConfigured()
     {
         var issues = ConfigurationIssues();
