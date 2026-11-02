@@ -110,6 +110,46 @@ History chỉ là ngữ cảnh hội thoại, không cấp quyền truy cập d�
 Ngoài phạm vi được nhắc từ chối trong system prompt; cần kiểm chứng phản hồi thật sau cấu hình,
 không coi unit test/provider giả là bằng chứng model luôn tuân thủ.
 
+## Gemini 3.8 và chẩn đoán timeout cập nhật 02/11
+
+Giữ `Ai__Model=gemini-3.8-flash`; không đổi model tự động hoặc gọi provider khác khi lỗi.
+Request Gemini 3 dùng `thinkingConfig.thinkingLevel=LOW`, không gửi temperature/topP/topK.
+Không gửi thinkingLevel cho Gemini 2.x. Output mặc định 4096 token; không coi giới hạn
+token nhỏ là biện pháp tắt thinking. MAX_TOKENS/output rỗng không giả trả lời thành công.
+Theo [migration Google](https://ai.google.dev/gemini-api/docs/whats-new-gemini-3.8) và
+[generateContent ThinkingConfig](https://ai.google.dev/api/generate-content#thinkingconfig).
+
+Các env dưới đây là tùy chọn, mặc định đã có trong code; không cần thêm lại key vào Git:
+
+```dotenv
+Ai__ThinkingLevel=LOW
+Ai__MaxOutputTokens=4096
+Ai__TotalTimeoutSeconds=45
+Ai__AttemptTimeoutSeconds=35
+Ai__MaxRetries=1
+```
+
+TotalTimeout tính cả chờ slot, đọc body và backoff, không phải mỗi retry lại 45 giây.
+AttemptTimeout không được lớn hơn TotalTimeout. FE nên đặt timeout trên 50 giây nếu muốn
+đợi hết ngân sách BE mặc định; nếu user đóng/cancel request thì BE hủy, không cố chạy ngầm.
+Mặc định tối đa 2 lần gửi (1 retry), tuần tự, backoff exponential có jitter; chỉ retry
+408/500/502/503/504 hoặc 429 có RetryInfo/Retry-After ngắn và chưa nhận diện quota ngày.
+Hint quá 2 giây không bị bỏ qua để retry sớm; trả unavailable để người dùng chờ.
+Không retry lỗi key/quyền/model/billing, quota ngày, 429 thiếu hint, timeout mù hoặc lỗi
+kết nối chưa rõ kết quả. Không chạy retry vô hạn/gọi chồng. Retry inference có thể tiêu
+thêm quota/chi phí, vì vậy có thể đặt MaxRetries=0 để tắt; tối đa cho phép 2 retry.
+Giới hạn 2 outbound đang chạy trong mỗi process; không thay hạn mức project hoặc nhiều replica.
+
+Log có traceId, model, attempt, HTTP status gốc, provider status allowlist, category và
+elapsedMs. Categories phân biệt RateLimit/DailyQuota/ConfigurationOrPermission/ProviderUnavailable;
+có log timeout/caller-cancelled/transport-error/malformed-response. Tìm theo traceId báo cáo FE.
+Không log key, prompt/history, body/message Google thô, project/quota ID hoặc thought.
+Không thể lấy lại body gốc đã bị bản cũ bỏ qua từ các traceId lịch sử bằng bản sửa này.
+
+Sau deploy cần thử cả chat và exercise bằng đúng role, đối chiếu log; options configured
+vẫn không xác nhận quota/key thực tế. Nếu Google hết quota hoặc service vẫn quá tải,
+code không thể tự chữa hạn mức. Không yêu cầu đổi key liên tục trong cùng project.
+
 ## Độ trễ SePay
 
 Repo hiện xử lý và commit Paid ngay trong webhook, KHÔNG đợi worker 15 giây.
@@ -131,8 +171,10 @@ Không yêu cầu chuyển thêm tiền; đơn B66 cũ 8000đ chưa được đ�
 
 ## Kiểm thử và triển khai
 
-Build thành công, 182 kiểm tra workflow qua với DB InMemory, HTTP Gemini giả. Có ca key
-opaque chứa dấu chấm được gửi nguyên vẹn, config metadata không lộ key và CR/LF bị chặn.
+Build thành công, 213 kiểm tra workflow qua với DB InMemory, HTTP Gemini giả. Có ca key
+opaque chứa dấu chấm được gửi nguyên vẹn, config metadata không lộ key và CR/LF bị chặn;
+Gemini 3.8 LOW, retry hữu hạn, daily quota, RetryInfo/Retry-After, MAX_TOKENS, output rỗng,
+timeout, caller cancellation và log không lộ prompt/key/raw body.
 Không gọi Google/SePay thật, không
 login demo Render, không tạo đơn hay giả webhook production, không tiêu quota AI thật.
 Chưa xác minh key/quota và nội dung Gemini thực tế; cần chủ service cấu hình rồi thử bằng

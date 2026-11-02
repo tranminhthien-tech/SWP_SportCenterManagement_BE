@@ -42,7 +42,9 @@ builder.Services.AddScoped<SWP_SportCenter.Service.Sepay.ISepayService, SWP_Spor
 builder.Services.AddScoped<SWP_SportCenter.Service.Payment.ClassCommerceService>(); // FIX B53 B55 B56
 // FIX B48 / THAY_THONG_TIN_AI: Ai__Enabled, Ai__ApiKey, Ai__Model. Không sửa appsettings đang có của người dùng.
 builder.Services.Configure<SWP_SportCenter.Service.Ai.AiOptions>(builder.Configuration.GetSection("Ai"));
-builder.Services.AddHttpClient<SWP_SportCenter.Service.Ai.IAiClient, SWP_SportCenter.Service.Ai.GeminiClient>(client => client.Timeout = TimeSpan.FromSeconds(25))
+// CODE CŨ: client.Timeout = TimeSpan.FromSeconds(25), không có tổng ngân sách retry.
+// FIX B48: GeminiClient quản lý CTS tổng và từng lần; không bị hai timeout chồng nhau.
+builder.Services.AddHttpClient<SWP_SportCenter.Service.Ai.IAiClient, SWP_SportCenter.Service.Ai.GeminiClient>(client => client.Timeout = Timeout.InfiniteTimeSpan)
     .RedactLoggedHeaders(new[] { "x-goog-api-key" });
 builder.Services.AddScoped<SWP_SportCenter.Service.Ai.AiService>();
 builder.Services.AddRateLimiter(options => {
