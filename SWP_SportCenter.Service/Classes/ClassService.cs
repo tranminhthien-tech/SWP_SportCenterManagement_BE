@@ -182,7 +182,8 @@ public class ClassService : IClassService
         await using var tx = _context.Database.IsRelational() ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
         var cls = await _context.Classes.Include(c => c.ClassSessions).FirstOrDefaultAsync(c => c.Id == id && !c.IsDeleted);
         if (cls == null) return false;
-        if (ClassRules.IsRunning(cls, _clock.GetUtcNow())) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp đang diễn ra nên không xóa được.");
+        // CODE CŨ: if (ClassRules.IsRunning(cls, _clock.GetUtcNow())) throw new SWP_SportCenter.Service.Exceptions.BusinessException("Lớp đang diễn ra nên không xóa được.");
+        ClassRules.EnsureCanDelete(cls, _clock.GetUtcNow()); // FIX B58: chặn cả buổi đầu đã qua dù status còn Scheduled.
         // FIX B58: xóa lớp chưa mở thì trả hold và yêu cầu hoàn cho người đã trả, không mất dấu tiền.
         if (!ClassRules.HasStarted(cls, _clock.GetUtcNow())) {
             var bookings = await _context.ClassBookings.Include(b => b.Invoice).Where(b => b.ClassId == id && !b.IsDeleted && b.Status != Repository.Enum.BookingStatus.Cancelled).ToListAsync();
@@ -192,6 +193,8 @@ public class ClassService : IClassService
                 if (b.Invoice?.Status == Repository.Enum.InvoiceStatus.Paid && b.Invoice.Amount > 0) b.Invoice.RefundRequestedAt ??= _clock.GetUtcNow();
             }
         }
+        // FIX B58: kiểm tra lại sau các await trước lúc lưu, tránh đi qua giờ bắt đầu trong request.
+        ClassRules.EnsureCanDelete(cls, _clock.GetUtcNow());
         cls.IsDeleted = true; // FIX B58: giữ lịch sử tài chính.
         await _context.SaveChangesAsync(); if (tx != null) await tx.CommitAsync(); return true;
     }
