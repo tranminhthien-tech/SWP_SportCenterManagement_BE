@@ -16,13 +16,25 @@ public sealed class AiOptions
     public bool Enabled { get; set; }
     public string ApiKey { get; set; } = ""; // THAY_THONG_TIN_AI: Ai__ApiKey, khóa Gemini.
     public string Model { get; set; } = ""; // THAY_THONG_TIN_AI: Ai__Model, model Gemini được cấp quyền sử dụng.
+    // FIX B48 02/11: ngân sách hữu hạn cho cả retry, cấu hình tùy chọn ở backend.
+    public string ThinkingLevel { get; set; } = "LOW";
+    public int MaxOutputTokens { get; set; } = 4096;
+    public int TotalTimeoutSeconds { get; set; } = 45;
+    // CODE CŨ: mỗi lần bị cắt sau 25 giây dù model đang sinh câu trả lời.
+    public int AttemptTimeoutSeconds { get; set; } = 35;
+    public int MaxRetries { get; set; } = 1;
     // FIX B48 01/11: chẩn đoán cấu hình bằng tên biến, không trả giá trị key hoặc gọi provider để kiểm tra.
     public string[] ConfigurationIssues() => new[] {
         Enabled ? null : "Ai__Enabled",
         // CODE CŨ: chỉ string.IsNullOrWhiteSpace(ApiKey), có thể lọt CR/LF vào HTTP header/log lỗi.
         // CODE CŨ: Regex.IsMatch(ApiKey ?? "", "^[A-Za-z0-9_-]{1,256}$") ? null : "Ai__ApiKey",
         IsSafeApiKey(ApiKey) ? null : "Ai__ApiKey", // FIX B48 02/11: dấu chấm không phải lỗi cấu hình.
-        Regex.IsMatch(Model ?? "", "^gemini-[a-zA-Z0-9.-]{1,90}$") ? null : "Ai__Model"
+        Regex.IsMatch(Model ?? "", "^gemini-[a-zA-Z0-9.-]{1,90}$") ? null : "Ai__Model",
+        new[] { "LOW", "MEDIUM", "HIGH" }.Contains(ThinkingLevel, StringComparer.OrdinalIgnoreCase) ? null : "Ai__ThinkingLevel",
+        MaxOutputTokens is >= 256 and <= 8192 ? null : "Ai__MaxOutputTokens",
+        TotalTimeoutSeconds is >= 10 and <= 90 ? null : "Ai__TotalTimeoutSeconds",
+        AttemptTimeoutSeconds >= 5 && AttemptTimeoutSeconds <= 60 && AttemptTimeoutSeconds <= TotalTimeoutSeconds ? null : "Ai__AttemptTimeoutSeconds",
+        MaxRetries is >= 0 and <= 2 ? null : "Ai__MaxRetries"
     }.Where(x => x != null).Select(x => x!).ToArray();
     // FIX B48: chỉ kiểm tra an toàn HTTP header, không đoán prefix/định dạng key của Google.
     // Không Trim/sửa key âm thầm. Google quyết định key/quyền/quota có hợp lệ hay không.
@@ -62,6 +74,7 @@ public sealed class AiReply
 }
 public interface IAiClient { Task<string> GenerateAsync(string system, IReadOnlyList<ChatMessage> messages, CancellationToken ct); }
 // FIX B48: không nhận URL/model/key từ body; không cho AI gọi tools hoặc sửa dữ liệu.
+/* CODE CŨ B48: request temperature cố định, thiếu thinking config/log và ngân sách retry.
 public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> options) : IAiClient
 {
     public async Task<string> GenerateAsync(string system, IReadOnlyList<ChatMessage> messages, CancellationToken ct)
@@ -108,6 +121,7 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
           catch (HttpRequestException) { throw new AiProviderException("Không kết nối được dịch vụ AI."); }
     }
 }
+*/
 public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient client, TimeProvider clock, IOptionsSnapshot<AiOptions> options)
 {
     private const string Rules = "Bạn là trợ lý SportCenter, trả lời tiếng Việt ngắn gọn. Chỉ hướng dẫn tập luyện cơ bản và dùng hệ thống. " +

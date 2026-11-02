@@ -83,7 +83,9 @@ internal static class WorkflowRegression
         builder.Services.AddScoped<SWP_SportCenter.Service.Classes.ClassLifecycleService>();
         builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("Ai"));
         var aiHttp = new AiStubHandler();
-        builder.Services.AddScoped<IAiClient>(sp => new GeminiClient(new HttpClient(aiHttp, disposeHandler: false), sp.GetRequiredService<IOptionsSnapshot<AiOptions>>()));
+        // CODE CŨ: GeminiClient chỉ nhận HttpClient/options, không có log theo traceId.
+        builder.Services.AddScoped<IAiClient>(sp => new GeminiClient(new HttpClient(aiHttp, disposeHandler: false) { Timeout = Timeout.InfiniteTimeSpan },
+            sp.GetRequiredService<IOptionsSnapshot<AiOptions>>(), sp.GetRequiredService<ILogger<GeminiClient>>(), sp.GetRequiredService<IHttpContextAccessor>()));
         builder.Services.AddScoped<AiService>();
         builder.Services.AddRateLimiter(o => { o.RejectionStatusCode = 429;
             o.OnRejected = SWP_SportCenter.Infrastructure.AiRateLimitResponse.WriteAsync; // FIX: cùng contract với production.
@@ -520,6 +522,58 @@ internal static class WorkflowRegression
         Check((await http.DeleteAsync($"/api/classes/{futureCancelled.Id}")).IsSuccessStatusCode, "B58 cancelled before any first start can soft-delete");
         var futureScheduled = await NewClass("B58 scheduled before first session", 0);
         Check((await http.DeleteAsync($"/api/classes/{futureScheduled.Id}")).IsSuccessStatusCode, "B58 future Scheduled class remains deletable");
+        // FIX Gemini 3.8: transport tests dùng key/provider giả, không dùng quota thật.
+        var geminiOptions = new AiOptions { Enabled = true, ApiKey = "synthetic.secret-key.with-dot", Model = "gemini-3.8-flash", TotalTimeoutSeconds = 10, AttemptTimeoutSeconds = 5 };
+        var gen = GeminiClient.GenerationConfig(geminiOptions);
+        Check(!gen.ContainsKey("temperature") && !gen.ContainsKey("topP") && !gen.ContainsKey("topK"), "Gemini 3.8 omits deprecated sampling params");
+        using (var configDoc = JsonDocument.Parse(JsonSerializer.Serialize(gen)))
+            Check(configDoc.RootElement.GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString() == "LOW" && configDoc.RootElement.GetProperty("maxOutputTokens").GetInt32() == 4096, "Gemini 3.8 LOW thinking with bounded non-tiny output");
+        Check(!GeminiClient.GenerationConfig(new AiOptions { Model = "gemini-2.5-flash" }).ContainsKey("thinkingConfig"), "Gemini 2.x not sent incompatible thinkingLevel");
+        Check(new AiOptions { Enabled = true, ApiKey = "safe", Model = "gemini-3.8-flash", ThinkingLevel = "MINIMAL" }.ConfigurationIssues().Contains("Ai__ThinkingLevel"), "Gemini 3.8 MINIMAL rejected locally");
+        Check(new AiOptions { Enabled = true, ApiKey = "safe", Model = "gemini-test", MaxRetries = 100 }.ConfigurationIssues().Contains("Ai__MaxRetries"), "Gemini unbounded retry configuration rejected");
+        var geminiLog = new GeminiTestLogger();
+        const string syntheticReply = "{\"candidates\":[{\"finishReason\":\"STOP\",\"content\":{\"parts\":[{\"thought\":true,\"text\":\"hidden-thought\"},{\"text\":\"Real synthetic provider reply\"}]}}]}";
+        async Task<(string? Reply, Exception? Error)> InvokeGemini(GeminiScriptHandler handler, CancellationToken token = default) {
+            using var transport = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+            var provider = new GeminiClient(transport, new GeminiTestOptions(geminiOptions), geminiLog, new HttpContextAccessor());
+            try { return (await provider.GenerateAsync("private-system-context", new[] { new ChatMessage { Content = "private-user-prompt" } }, token), null); }
+            catch (Exception error) { return (null, error); }
+        }
+        var transientHandler = new GeminiScriptHandler();
+        transientHandler.Responses.Enqueue((503, "{\"error\":{\"status\":\"UNAVAILABLE\",\"message\":\"private-google-body\"}}", null));
+        transientHandler.Responses.Enqueue((200, syntheticReply, null));
+        var transientReply = await InvokeGemini(transientHandler);
+        Check(transientReply.Reply == "Real synthetic provider reply" && transientHandler.Calls == 2, "Gemini transient 503 retries once then returns provider text only");
+        using (var sent = JsonDocument.Parse(transientHandler.RequestBodies[0]))
+            Check(sent.RootElement.GetProperty("generationConfig").GetProperty("thinkingConfig").GetProperty("thinkingLevel").GetString() == "LOW", "Gemini HTTP body contains model-specific thinking config");
+        Check(geminiLog.Messages.Any(m => m.Contains("httpStatus 503") && m.Contains("UNAVAILABLE")) &&
+            !string.Join(" ", geminiLog.Messages).Contains("private-google-body") && !string.Join(" ", geminiLog.Messages).Contains(geminiOptions.ApiKey) &&
+            !string.Join(" ", geminiLog.Messages).Contains("private-user-prompt") && !string.Join(" ", geminiLog.Messages).Contains("private-system-context"), "Gemini diagnostic logs contain status not key prompt or raw Google body");
+        var permanentHandler = new GeminiScriptHandler(); permanentHandler.Responses.Enqueue((403, "{\"error\":{\"status\":\"PERMISSION_DENIED\"}}", null));
+        var permanent = await InvokeGemini(permanentHandler);
+        Check(permanent.Error is AiUnavailableException && permanentHandler.Calls == 1, "Gemini auth permission error never retried");
+        var dailyHandler = new GeminiScriptHandler(); dailyHandler.Responses.Enqueue((429, "{\"error\":{\"status\":\"RESOURCE_EXHAUSTED\",\"details\":[{\"violations\":[{\"quotaId\":\"GenerateRequestsPerDayPerProject\"}]},{\"retryDelay\":\"0.01s\"}]}}", null));
+        var dailyReply = await InvokeGemini(dailyHandler);
+        Check(dailyReply.Error is AiUnavailableException && dailyReply.Error.Message.Contains("hạn mức ngày") && dailyHandler.Calls == 1, "Gemini daily project quota not blindly retried");
+        var unknownQuota = new GeminiScriptHandler(); unknownQuota.Responses.Enqueue((429, "{\"error\":{\"status\":\"RESOURCE_EXHAUSTED\"}}", null));
+        Check((await InvokeGemini(unknownQuota)).Error is AiUnavailableException && unknownQuota.Calls == 1, "Gemini unknown quota without RetryInfo not guessed transient");
+        var minuteQuota = new GeminiScriptHandler(); minuteQuota.Responses.Enqueue((429, "{\"error\":{\"status\":\"RESOURCE_EXHAUSTED\",\"details\":[{\"retryDelay\":\"0.01s\"}]}}", null)); minuteQuota.Responses.Enqueue((200, syntheticReply, null));
+        Check((await InvokeGemini(minuteQuota)).Reply != null && minuteQuota.Calls == 2, "Gemini short transient RetryInfo permits one bounded retry");
+        var headerQuota = new GeminiScriptHandler(); headerQuota.Responses.Enqueue((429, "{}", TimeSpan.FromSeconds(1))); headerQuota.Responses.Enqueue((200, syntheticReply, null));
+        Check((await InvokeGemini(headerQuota)).Reply != null && headerQuota.Calls == 2, "Gemini short Retry-After header alone permits bounded retry");
+        var longRetry = new GeminiScriptHandler(); longRetry.Responses.Enqueue((503, "{}", TimeSpan.FromSeconds(30)));
+        Check((await InvokeGemini(longRetry)).Error is AiUnavailableException && longRetry.Calls == 1, "Gemini does not ignore long Retry-After or exceed budget waiting");
+        var exhausted = new GeminiScriptHandler(); exhausted.Responses.Enqueue((503,"{}", null)); exhausted.Responses.Enqueue((503,"{}", null));
+        Check((await InvokeGemini(exhausted)).Error is AiUnavailableException && exhausted.Calls == 2, "Gemini retry count capped after repeated 503");
+        var cappedOutput = new GeminiScriptHandler(); cappedOutput.Responses.Enqueue((200, "{\"candidates\":[{\"finishReason\":\"MAX_TOKENS\",\"content\":{\"parts\":[{\"text\":\"unfinished\"}]}}]}", null));
+        Check((await InvokeGemini(cappedOutput)).Error is AiUnavailableException && cappedOutput.Calls == 1, "Gemini MAX_TOKENS not fake completed reply or retried");
+        var emptyOutput = new GeminiScriptHandler(); emptyOutput.Responses.Enqueue((200, "{\"candidates\":[{\"content\":{\"parts\":[]}}]}", null));
+        Check((await InvokeGemini(emptyOutput)).Error is AiProviderException, "Gemini empty output not fake 200 answer");
+        var callerCancelled = new GeminiScriptHandler(); using (var cancellation = new CancellationTokenSource()) {
+            cancellation.Cancel(); var cancelledReply = await InvokeGemini(callerCancelled, cancellation.Token);
+            Check(cancelledReply.Error is OperationCanceledException && callerCancelled.Calls == 0, "Gemini caller cancellation respected before outbound call"); }
+        var blockedNetwork = new GeminiScriptHandler { WaitForCancellation = true }; var timeoutTimer = System.Diagnostics.Stopwatch.StartNew();
+        Check((await InvokeGemini(blockedNetwork)).Error is AiUnavailableException && blockedNetwork.Calls == 1 && timeoutTimer.Elapsed < TimeSpan.FromSeconds(9), "Gemini attempt timeout bounded and not blindly replayed");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }
@@ -538,5 +592,34 @@ internal sealed class AiStubHandler : HttpMessageHandler
         LastApiKey = HasKey ? request.Headers.GetValues("x-goog-api-key").Single() : null;
         if (request.RequestUri!.Host != "generativelanguage.googleapis.com") throw new Exception("Unexpected AI endpoint");
         return new HttpResponseMessage(Status) { Content = new StringContent(Body, System.Text.Encoding.UTF8, "application/json") };
+    }
+}
+
+internal sealed class GeminiTestOptions(AiOptions value) : IOptionsSnapshot<AiOptions>
+{
+    public AiOptions Value => value;
+    public AiOptions Get(string? name) => value;
+}
+internal sealed class GeminiTestLogger : ILogger<GeminiClient>
+{
+    public readonly List<string> Messages = new();
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+    public bool IsEnabled(LogLevel level) => true;
+    public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        => Messages.Add(formatter(state, exception));
+}
+internal sealed class GeminiScriptHandler : HttpMessageHandler
+{
+    public readonly Queue<(int Status, string Body, TimeSpan? Retry)> Responses = new();
+    public readonly List<string> RequestBodies = new();
+    public int Calls;
+    public bool WaitForCancellation;
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        Calls++; RequestBodies.Add(await request.Content!.ReadAsStringAsync(ct));
+        if (WaitForCancellation) await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        var next = Responses.Dequeue(); var response = new HttpResponseMessage((HttpStatusCode)next.Status) { Content = new StringContent(next.Body, System.Text.Encoding.UTF8, "application/json") };
+        if (next.Retry.HasValue) response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(next.Retry.Value);
+        return response;
     }
 }
