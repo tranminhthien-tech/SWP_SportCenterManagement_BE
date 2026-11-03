@@ -30,7 +30,8 @@ public sealed class AiOptions
     // CODE CŨ: mỗi lần bị cắt sau 25 giây dù model đang sinh câu trả lời.
     // CODE CŨ: public int AttemptTimeoutSeconds { get; set; } = 35;
     public int AttemptTimeoutSeconds { get; set; } = 20; // FIX: còn ngân sách cho retry hữu hạn.
-    public int MaxRetries { get; set; } = 1;
+    // CODE CŨ: public int MaxRetries { get; set; } = 1;
+    public int MaxRetries { get; set; } = 0; // FIX: quota miễn phí ít, không tự gửi thêm khi FE đang test.
     // FIX B48 01/11: chẩn đoán cấu hình bằng tên biến, không trả giá trị key hoặc gọi provider để kiểm tra.
     public string[] ConfigurationIssues() => new[] {
         Enabled ? null : "Ai__Enabled",
@@ -57,7 +58,14 @@ public sealed class AiOptions
 // FIX B48: configured chỉ xác nhận config cục bộ, không khẳng định key/quota/provider hoạt động.
 public sealed record AiConfigurationResponse(string Provider, bool Enabled, bool Configured, string[] ConfigurationIssues,
     string ChatAccess = "Authenticated", string ExerciseAccess = "Coach", bool ProviderVerified = false);
-public sealed class AiUnavailableException(string message) : Exception(message);
+// CODE CŨ: exception chỉ có message, FE không phân biệt quota/timeout/provider.
+public sealed class AiUnavailableException(string message, string code = "AI_UNAVAILABLE",
+    int? providerHttpStatus = null, string? providerStatus = null) : Exception(message)
+{
+    public string Code { get; } = code;
+    public int? ProviderHttpStatus { get; } = providerHttpStatus;
+    public string? ProviderStatus { get; } = providerStatus;
+}
 public sealed class AiProviderException(string message) : Exception(message);
 public sealed class ChatMessage { public string Role { get; set; } = "user"; public string Content { get; set; } = ""; }
 public sealed class ChatRequest
@@ -156,7 +164,8 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
         deadline.CancelAfter(TimeSpan.FromSeconds(options.Value.EffectiveTotalTimeoutSeconds));
         try { return await action(deadline.Token); }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
-            throw new AiUnavailableException("AI chưa hoàn tất trong thời gian cho phép. Vui lòng thử lại sau.");
+            // CODE CŨ: chỉ trả message chung, FE không biết deadline toàn luồng đã hết.
+            throw new AiUnavailableException("AI chưa hoàn tất trong thời gian cho phép. Vui lòng thử lại sau.", "AI_TIMEOUT"); // FIX
         }
         finally {
             logger.LogInformation("AI request traceId {TraceId} operation {Operation} elapsedMs {ElapsedMs} deadlineExpired {Expired} callerCancelled {Cancelled}",

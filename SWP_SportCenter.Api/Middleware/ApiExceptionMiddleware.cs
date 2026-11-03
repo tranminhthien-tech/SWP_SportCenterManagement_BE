@@ -49,6 +49,13 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
             context.Response.StatusCode = status;
             var problem = new ProblemDetails { Status = status, Title = message, Detail = message };
             problem.Extensions["message"] = message;
+            // FIX AI: FE phân biệt quota ngày với timeout; không coi configured=true là inference thành công.
+            if (ex is SWP_SportCenter.Service.Ai.AiUnavailableException ai) {
+                problem.Extensions["code"] = ai.Code;
+                problem.Extensions["retryable"] = ai.Code is "AI_TIMEOUT" or "AI_PROVIDER_UNAVAILABLE";
+                if (ai.ProviderHttpStatus.HasValue) problem.Extensions["providerHttpStatus"] = ai.ProviderHttpStatus.Value;
+                if (ai.ProviderStatus != null) problem.Extensions["providerStatus"] = ai.ProviderStatus;
+            }
             if (ex is PendingPaymentException pending) problem.Extensions["paymentId"] = pending.PaymentId; // FIX B53 B55
             problem.Extensions["traceId"] = context.TraceIdentifier;
             context.Response.ContentType = "application/problem+json";

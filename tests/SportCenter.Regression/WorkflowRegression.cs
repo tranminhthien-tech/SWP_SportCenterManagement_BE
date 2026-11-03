@@ -523,7 +523,8 @@ internal static class WorkflowRegression
         var futureScheduled = await NewClass("B58 scheduled before first session", 0);
         Check((await http.DeleteAsync($"/api/classes/{futureScheduled.Id}")).IsSuccessStatusCode, "B58 future Scheduled class remains deletable");
         // FIX Gemini 3.8: transport tests dùng key/provider giả, không dùng quota thật.
-        var geminiOptions = new AiOptions { Enabled = true, ApiKey = "synthetic.secret-key.with-dot", Model = "gemini-3.8-flash", TotalTimeoutSeconds = 10, AttemptTimeoutSeconds = 5 };
+        // CODE CŨ: dựa vào retry mặc định = 1. FIX: chỉ bật retry rõ ràng trong các ca kiểm retry.
+        var geminiOptions = new AiOptions { Enabled = true, ApiKey = "synthetic.secret-key.with-dot", Model = "gemini-3.8-flash", TotalTimeoutSeconds = 10, AttemptTimeoutSeconds = 5, MaxRetries = 1 };
         var gen = GeminiClient.GenerationConfig(geminiOptions);
         Check(!gen.ContainsKey("temperature") && !gen.ContainsKey("topP") && !gen.ContainsKey("topK"), "Gemini 3.8 omits deprecated sampling params");
         using (var configDoc = JsonDocument.Parse(JsonSerializer.Serialize(gen)))
@@ -591,6 +592,21 @@ internal static class WorkflowRegression
             await middleware.InvokeAsync(abortedContext);
             Check(abortedContext.Response.StatusCode == 499, "Client cancellation is not reported as unhandled server 500");
         }
+        // FIX: kiểm JSON mà FE thực sự nhận, không chỉ kiểm câu thông báo.
+        var quotaError = new GeminiFailure(429, "RESOURCE_EXHAUSTED", "DailyQuota", false, null).ToException();
+        var quotaContext = new DefaultHttpContext(); quotaContext.Response.Body = new MemoryStream();
+        var quotaMiddleware = new SWP_SportCenter.Middleware.ApiExceptionMiddleware(_ => throw quotaError,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SWP_SportCenter.Middleware.ApiExceptionMiddleware>.Instance);
+        await quotaMiddleware.InvokeAsync(quotaContext);
+        quotaContext.Response.Body.Position = 0;
+        using (var errorJson = await JsonDocument.ParseAsync(quotaContext.Response.Body)) {
+            var error = errorJson.RootElement;
+            Check(quotaContext.Response.StatusCode == 503 && error.GetProperty("code").GetString() == "AI_DAILY_QUOTA" &&
+                !error.GetProperty("retryable").GetBoolean() && error.GetProperty("providerHttpStatus").GetInt32() == 429 &&
+                error.GetProperty("providerStatus").GetString() == "RESOURCE_EXHAUSTED", "FE receives daily quota code and original safe provider status without retry advice");
+        }
+        Check(stalledReply.Error is AiUnavailableException { Code: "AI_TIMEOUT" }, "FE can distinguish timeout from daily quota");
+        Check(new AiOptions().MaxRetries == 0, "Free quota protected by no automatic retry by default");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }

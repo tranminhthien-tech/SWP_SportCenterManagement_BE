@@ -126,14 +126,15 @@ Ai__ThinkingLevel=LOW
 Ai__MaxOutputTokens=4096
 Ai__TotalTimeoutSeconds=30
 Ai__AttemptTimeoutSeconds=20
-Ai__MaxRetries=1
+Ai__MaxRetries=0
 ```
 
 FIX 03/11: TotalTimeout bao gồm đọc DB/context, chờ slot, đọc body và backoff.
 Trần an toàn 30 giây được áp dụng cả khi env cũ đặt 45/90 giây; mỗi lần gọi mặc định 20 giây.
 AttemptTimeout không được lớn hơn TotalTimeout. FE có deadline 35 giây hiện tại không cần tăng;
 nếu user đóng/cancel request thì BE hủy và không ghi nhận nhầm thành lỗi 500.
-Mặc định tối đa 2 lần gửi (1 retry), tuần tự, backoff exponential có jitter; chỉ retry
+FIX: mặc định chỉ 1 lần gửi (0 retry) để bảo vệ quota miễn phí. Nếu chủ service bật
+MaxRetries=1 thì tối đa 2 lần gửi, tuần tự, backoff exponential có jitter; chỉ retry
 408/500/502/503/504 hoặc 429 có RetryInfo/Retry-After ngắn và chưa nhận diện quota ngày.
 Hint quá 2 giây không bị bỏ qua để retry sớm; trả unavailable để người dùng chờ.
 Không retry lỗi key/quyền/model/billing, quota ngày, 429 thiếu hint, timeout mù hoặc lỗi
