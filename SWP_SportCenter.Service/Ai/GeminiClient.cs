@@ -90,7 +90,8 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
                     // CODE CŨ: chỉ elapsedMs tổng, không biết lần gọi nào đang chờ headers/body.
                     logger.LogWarning("Gemini timeout traceId {TraceId} model {Model} attempt {Attempt} phase {Phase} attemptMs {AttemptMs} totalBudgetExpired {Expired} elapsedMs {ElapsedMs}",
                         traceId, c.Model, attempt, phase, attemptTimer.ElapsedMilliseconds, budget.IsCancellationRequested, timer.ElapsedMilliseconds);
-                    throw new AiUnavailableException("AI phản hồi quá lâu. Vui lòng thử lại sau, không gửi nhiều yêu cầu cùng lúc.");
+                    // CODE CŨ: chỉ có message, cùng 503 như quota ngày.
+                    throw new AiUnavailableException("AI phản hồi quá lâu. Vui lòng thử lại sau, không gửi nhiều yêu cầu cùng lúc.", "AI_TIMEOUT"); // FIX
                 }
                 catch (JsonException) {
                     logger.LogWarning("Gemini malformed-response traceId {TraceId} model {Model} attempt {Attempt}", traceId, c.Model, attempt);
@@ -111,7 +112,8 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
             logger.LogWarning("Gemini budget-timeout traceId {TraceId} model {Model} elapsedMs {ElapsedMs}", traceId, c.Model, timer.ElapsedMilliseconds);
-            throw new AiUnavailableException("AI đang bận hoặc phản hồi quá lâu. Vui lòng thử lại sau.");
+            // CODE CŨ: không có mã riêng cho timeout queue/budget.
+            throw new AiUnavailableException("AI đang bận hoặc phản hồi quá lâu. Vui lòng thử lại sau.", "AI_TIMEOUT"); // FIX
         }
         finally { if (entered) InFlight.Release(); }
     }
@@ -182,9 +184,20 @@ public sealed record GeminiFailure(int HttpStatus, string ProviderStatus, string
         bool transient = !daily && (httpStatus is 408 or 500 or 502 or 503 or 504 || (httpStatus == 429 && retry.HasValue));
         return new(httpStatus, status, category, transient, retry);
     }
+    /* CODE CŨ: lỗi quota/provider chỉ giữ thông báo, mất HTTP status và loại lỗi để FE phân biệt.
     public Exception ToException() => HttpStatus == 429
         ? new AiUnavailableException(Category == "DailyQuota" ? "Gemini đã chạm hạn mức ngày của project. Quản trị viên cần kiểm tra quota." : "Gemini đang giới hạn tần suất hoặc hạn mức. Vui lòng thử lại sau.")
         : Category == "ConfigurationOrPermission" ? new AiUnavailableException("Gemini chưa sẵn sàng. Quản trị viên cần kiểm tra key, model, billing và quyền sử dụng ở backend.")
         : Category == "ProviderUnavailable" ? new AiUnavailableException("Dịch vụ Gemini tạm thời chưa sẵn sàng. Vui lòng thử lại sau.")
+        : new AiProviderException("Dịch vụ AI trả về lỗi không hợp lệ. Vui lòng thử lại sau.");
+    */
+    // FIX: giữ 503 contract hiện tại; thêm mã ổn định và metadata allowlist, không lộ raw body/key.
+    public Exception ToException() => HttpStatus == 429
+        ? new AiUnavailableException(Category == "DailyQuota" ? "Gemini đã chạm hạn mức ngày của project. Quản trị viên cần kiểm tra quota." : "Gemini đang giới hạn tần suất hoặc hạn mức. Vui lòng thử lại sau.",
+            Category == "DailyQuota" ? "AI_DAILY_QUOTA" : "AI_RATE_LIMIT", HttpStatus, ProviderStatus)
+        : Category == "ConfigurationOrPermission"
+            ? new AiUnavailableException("Gemini chưa sẵn sàng. Quản trị viên cần kiểm tra key, model, billing và quyền sử dụng ở backend.", "AI_PROVIDER_CONFIGURATION", HttpStatus, ProviderStatus)
+        : Category == "ProviderUnavailable"
+            ? new AiUnavailableException("Dịch vụ Gemini tạm thời chưa sẵn sàng. Vui lòng thử lại sau.", "AI_PROVIDER_UNAVAILABLE", HttpStatus, ProviderStatus)
         : new AiProviderException("Dịch vụ AI trả về lỗi không hợp lệ. Vui lòng thử lại sau.");
 }
