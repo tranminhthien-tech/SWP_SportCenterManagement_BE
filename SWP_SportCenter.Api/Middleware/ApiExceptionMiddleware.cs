@@ -11,6 +11,14 @@ public sealed class ApiExceptionMiddleware(RequestDelegate next, ILogger<ApiExce
     public async Task InvokeAsync(HttpContext context)
     {
         try { await next(context); }
+        // CODE CŨ: OperationCanceledException rơi vào catch(Exception), bị ghi 500 và cố ghi body cho client đã ngắt.
+        // FIX 03/11: chỉ coi là client hủy khi RequestAborted thực sự được hủy; timeout nội bộ vẫn đi luồng lỗi chuẩn.
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            logger.LogInformation("Request cancelled by caller {TraceId}", context.TraceIdentifier);
+            if (!context.Response.HasStarted) context.Response.StatusCode = 499;
+            // Không ghi response body cho kết nối đã đóng, không che exception không liên quan.
+        }
         catch (Exception ex) when (!context.Response.HasStarted)
         {
             var status = ex switch

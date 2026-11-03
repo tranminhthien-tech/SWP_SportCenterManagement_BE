@@ -32,11 +32,15 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
         var timer = Stopwatch.StartNew();
         var traceId = http.HttpContext?.TraceIdentifier ?? Activity.Current?.Id ?? "background";
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(TimeSpan.FromSeconds(c.TotalTimeoutSeconds));
+        // CODE CŨ: budget.CancelAfter(TimeSpan.FromSeconds(c.TotalTimeoutSeconds));
+        budget.CancelAfter(TimeSpan.FromSeconds(c.EffectiveTotalTimeoutSeconds)); // FIX: env cũ 45/90 không vượt deadline FE.
         bool entered = false;
         try {
             await InFlight.WaitAsync(budget.Token); entered = true;
+            logger.LogInformation("Gemini queue-ready traceId {TraceId} queueMs {QueueMs}", traceId, timer.ElapsedMilliseconds); // FIX
             for (var attempt = 1; attempt <= c.MaxRetries + 1; attempt++) {
+                var attemptTimer = Stopwatch.StartNew();
+                var phase = "headers"; // FIX: phân biệt chờ response với chờ body.
                 using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(budget.Token);
                 attemptCts.CancelAfter(TimeSpan.FromSeconds(c.AttemptTimeoutSeconds));
                 using var req = new HttpRequestMessage(HttpMethod.Post,
@@ -49,6 +53,7 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
                 });
                 try {
                     using var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, attemptCts.Token);
+                    phase = "body";
                     logger.LogInformation("Gemini response traceId {TraceId} model {Model} attempt {Attempt} httpStatus {HttpStatus} elapsedMs {ElapsedMs}",
                         traceId, c.Model, attempt, (int)response.StatusCode, timer.ElapsedMilliseconds);
                     if (!response.IsSuccessStatusCode) {
@@ -65,7 +70,8 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
                             (retryAfter == null || retryAfter <= TimeSpan.FromSeconds(2));
                         var backoff = TimeSpan.FromMilliseconds(600 * Math.Pow(2, attempt - 1) + Random.Shared.Next(50, 200));
                         var delay = retryAfter > backoff ? retryAfter.Value : backoff;
-                        if (canRetry && timer.Elapsed + delay + TimeSpan.FromSeconds(3) < TimeSpan.FromSeconds(c.TotalTimeoutSeconds)) {
+                        // CODE CŨ: so với TotalTimeoutSeconds có thể là 45/90 từ env.
+                        if (canRetry && timer.Elapsed + delay + TimeSpan.FromSeconds(3) < TimeSpan.FromSeconds(c.EffectiveTotalTimeoutSeconds)) {
                             logger.LogInformation("Gemini retry traceId {TraceId} nextAttempt {Attempt} delayMs {DelayMs}", traceId, attempt + 1, delay.TotalMilliseconds);
                             // Sequential, exponential backoff + jitter, không gọi chồng. Không bỏ qua Retry-After dài.
                             await Task.Delay(delay, budget.Token); continue;
@@ -81,8 +87,9 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
                     // Không retry timeout mù: provider có thể vẫn đang tính và tính phí lần đầu.
-                    logger.LogWarning("Gemini timeout traceId {TraceId} model {Model} attempt {Attempt} totalBudgetExpired {Expired} elapsedMs {ElapsedMs}",
-                        traceId, c.Model, attempt, budget.IsCancellationRequested, timer.ElapsedMilliseconds);
+                    // CODE CŨ: chỉ elapsedMs tổng, không biết lần gọi nào đang chờ headers/body.
+                    logger.LogWarning("Gemini timeout traceId {TraceId} model {Model} attempt {Attempt} phase {Phase} attemptMs {AttemptMs} totalBudgetExpired {Expired} elapsedMs {ElapsedMs}",
+                        traceId, c.Model, attempt, phase, attemptTimer.ElapsedMilliseconds, budget.IsCancellationRequested, timer.ElapsedMilliseconds);
                     throw new AiUnavailableException("AI phản hồi quá lâu. Vui lòng thử lại sau, không gửi nhiều yêu cầu cùng lúc.");
                 }
                 catch (JsonException) {

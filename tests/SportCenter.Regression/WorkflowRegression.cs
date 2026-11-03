@@ -574,6 +574,23 @@ internal static class WorkflowRegression
             Check(cancelledReply.Error is OperationCanceledException && callerCancelled.Calls == 0, "Gemini caller cancellation respected before outbound call"); }
         var blockedNetwork = new GeminiScriptHandler { WaitForCancellation = true }; var timeoutTimer = System.Diagnostics.Stopwatch.StartNew();
         Check((await InvokeGemini(blockedNetwork)).Error is AiUnavailableException && blockedNetwork.Calls == 1 && timeoutTimer.Elapsed < TimeSpan.FromSeconds(9), "Gemini attempt timeout bounded and not blindly replayed");
+        // FIX 03/11: tái hiện đúng log Render: 503 lần đầu, lần hai không nhận headers.
+        var unavailableThenStall = new GeminiScriptHandler { WaitAfterResponses = true };
+        unavailableThenStall.Responses.Enqueue((503, "{\"error\":{\"status\":\"UNAVAILABLE\"}}", null));
+        var retryTimer = System.Diagnostics.Stopwatch.StartNew();
+        var stalledReply = await InvokeGemini(unavailableThenStall);
+        Check(stalledReply.Error is AiUnavailableException && unavailableThenStall.Calls == 2 && retryTimer.Elapsed < TimeSpan.FromSeconds(9), "Gemini 503 then stalled retry terminates without third send or fake reply");
+        Check(geminiLog.Messages.Any(m => m.Contains("phase headers") && m.Contains("attemptMs")) && geminiLog.Messages.Any(m => m.Contains("queue-ready")), "Gemini diagnostics distinguish queue headers and attempt timing");
+        Check(new AiOptions { TotalTimeoutSeconds = 90 }.EffectiveTotalTimeoutSeconds == 30 && new AiOptions().AttemptTimeoutSeconds == 20, "Gemini legacy env cannot extend AI beyond FE deadline");
+        // FIX: tái hiện lỗi cancellation 500 trong file log đính kèm.
+        using (var aborted = new CancellationTokenSource()) {
+            aborted.Cancel();
+            var abortedContext = new DefaultHttpContext { RequestAborted = aborted.Token };
+            var middleware = new SWP_SportCenter.Middleware.ApiExceptionMiddleware(_ => throw new OperationCanceledException(aborted.Token),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<SWP_SportCenter.Middleware.ApiExceptionMiddleware>.Instance);
+            await middleware.InvokeAsync(abortedContext);
+            Check(abortedContext.Response.StatusCode == 499, "Client cancellation is not reported as unhandled server 500");
+        }
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }
@@ -614,10 +631,12 @@ internal sealed class GeminiScriptHandler : HttpMessageHandler
     public readonly List<string> RequestBodies = new();
     public int Calls;
     public bool WaitForCancellation;
+    public bool WaitAfterResponses; // FIX: provider trả 503 rồi treo lần retry.
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         Calls++; RequestBodies.Add(await request.Content!.ReadAsStringAsync(ct));
-        if (WaitForCancellation) await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        // CODE CŨ: if (WaitForCancellation) await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        if (WaitForCancellation || (WaitAfterResponses && Responses.Count == 0)) await Task.Delay(Timeout.InfiniteTimeSpan, ct);
         var next = Responses.Dequeue(); var response = new HttpResponseMessage((HttpStatusCode)next.Status) { Content = new StringContent(next.Body, System.Text.Encoding.UTF8, "application/json") };
         if (next.Retry.HasValue) response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(next.Retry.Value);
         return response;
