@@ -4,6 +4,9 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http;
+using System.Diagnostics;
 using SWP_SportCenter.Repository;
 using SWP_SportCenter.Repository.Enum;
 using SWP_SportCenter.Service.Security;
@@ -19,9 +22,14 @@ public sealed class AiOptions
     // FIX B48 02/11: ngân sách hữu hạn cho cả retry, cấu hình tùy chọn ở backend.
     public string ThinkingLevel { get; set; } = "LOW";
     public int MaxOutputTokens { get; set; } = 4096;
-    public int TotalTimeoutSeconds { get; set; } = 45;
+    // CODE CŨ: public int TotalTimeoutSeconds { get; set; } = 45;
+    // FIX 03/11: toàn bộ nghiệp vụ phải kết thúc trước deadline FE 35 giây, kể cả env cũ.
+    public const int MaximumRequestSeconds = 30;
+    public int TotalTimeoutSeconds { get; set; } = 30;
+    public int EffectiveTotalTimeoutSeconds => Math.Min(TotalTimeoutSeconds, MaximumRequestSeconds);
     // CODE CŨ: mỗi lần bị cắt sau 25 giây dù model đang sinh câu trả lời.
-    public int AttemptTimeoutSeconds { get; set; } = 35;
+    // CODE CŨ: public int AttemptTimeoutSeconds { get; set; } = 35;
+    public int AttemptTimeoutSeconds { get; set; } = 20; // FIX: còn ngân sách cho retry hữu hạn.
     public int MaxRetries { get; set; } = 1;
     // FIX B48 01/11: chẩn đoán cấu hình bằng tên biến, không trả giá trị key hoặc gọi provider để kiểm tra.
     public string[] ConfigurationIssues() => new[] {
@@ -122,7 +130,9 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
     }
 }
 */
-public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient client, TimeProvider clock, IOptionsSnapshot<AiOptions> options)
+// CODE CŨ: constructor không có logger/trace; deadline chỉ bắt đầu sau khi đọc DB.
+public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient client, TimeProvider clock, IOptionsSnapshot<AiOptions> options,
+    ILogger<AiService> logger, IHttpContextAccessor http)
 {
     private const string Rules = "Bạn là trợ lý SportCenter, trả lời tiếng Việt ngắn gọn. Chỉ hướng dẫn tập luyện cơ bản và dùng hệ thống. " +
         "Không chẩn đoán, kê đơn, cam kết giảm cân hay khuyên tập qua đau. Khi có triệu chứng nguy hiểm, khuyên dừng tập và tìm trợ giúp y tế. " +
@@ -133,8 +143,30 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
         "Member không có thẻ vẫn mua lớp theo giá gốc. Chỉ nhận đăng ký trước buổi đầu, đơn chờ giữ chỗ 15 phút. " +
         "QR và thao tác kiểm tra không phải bằng chứng đã trả; trạng thái Paid do backend đối soát. " +
         "Hoàn tiền là luồng thủ công có chứng từ, không hứa tự chuyển tiền hoặc hồi sinh đơn hết hạn.";
-    public async Task<AiReply> ChatAsync(ChatRequest request, CancellationToken ct)
+    // FIX 03/11: chung ngân sách cho cả chat và exercise, truyền cancellation qua DB/provider.
+    public Task<AiReply> ChatAsync(ChatRequest request, CancellationToken ct) =>
+        WithinDeadlineAsync("chat", token => ChatCoreAsync(request, token), ct);
+    public Task<AiReply> ExercisesAsync(ExerciseRequest request, CancellationToken ct) =>
+        WithinDeadlineAsync("exercise", token => ExercisesCoreAsync(request, token), ct);
+    private async Task<AiReply> WithinDeadlineAsync(string operation, Func<CancellationToken, Task<AiReply>> action, CancellationToken ct)
     {
+        options.Value.RequireConfigured();
+        var timer = Stopwatch.StartNew();
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(options.Value.EffectiveTotalTimeoutSeconds));
+        try { return await action(deadline.Token); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
+            throw new AiUnavailableException("AI chưa hoàn tất trong thời gian cho phép. Vui lòng thử lại sau.");
+        }
+        finally {
+            logger.LogInformation("AI request traceId {TraceId} operation {Operation} elapsedMs {ElapsedMs} deadlineExpired {Expired} callerCancelled {Cancelled}",
+                http.HttpContext?.TraceIdentifier, operation, timer.ElapsedMilliseconds, deadline.IsCancellationRequested && !ct.IsCancellationRequested, ct.IsCancellationRequested);
+        }
+    }
+    // CODE CŨ: ChatAsync xử lý trực tiếp, không có deadline bao gồm truy vấn context.
+    private async Task<AiReply> ChatCoreAsync(ChatRequest request, CancellationToken ct)
+    {
+        var contextTimer = Stopwatch.StartNew(); // FIX: đo DB/context riêng với network.
         Validator.ValidateObject(request, new ValidationContext(request), true);
         if (request.History == null || request.History.Count > 8 || request.History.Any(m => m == null || m.Role is not ("user" or "assistant") || string.IsNullOrWhiteSpace(m.Content) || m.Content.Length > 1500))
             throw new ArgumentException("Lịch sử tối đa 8 tin nhắn user/assistant, mỗi tin tối đa 1500 ký tự.");
@@ -145,14 +177,18 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
         var messages = request.History.Concat(new[] { new ChatMessage { Role = "user", Content = request.Message } }).ToArray();
         // CODE CŨ: chỉ gửi catalog gói, nên model không biết môn/lớp/lịch thật.
         var context = await new AiContextBuilder(db, actor, clock).BuildAsync(ct);
+        // FIX: xác nhận đã đọc xong context, không ghi prompt/dữ liệu cá nhân.
+        logger.LogInformation("AI context-ready traceId {TraceId} operation chat contextMs {ContextMs}", http.HttpContext?.TraceIdentifier, contextTimer.ElapsedMilliseconds);
         return new() { Reply = await client.GenerateAsync(Rules +
             " Chỉ trả lời trong phạm vi SportCenter hoặc tập luyện cơ bản. Ngoài phạm vi thì từ chối ngắn gọn. " +
             "Dữ liệu có giới hạn số lượng, không nói đây là toàn bộ. Lịch cá nhân chỉ của người đang đăng nhập; " +
             "nếu không có lịch thì nói chưa có trong dữ liệu, không lấy lịch công khai làm lịch đã đăng ký. " +
             "Catalog gói hiện bán: " + JsonSerializer.Serialize(catalog) + " Dữ liệu hiện tại: " + JsonSerializer.Serialize(context), messages, ct) };
     }
-    public async Task<AiReply> ExercisesAsync(ExerciseRequest request, CancellationToken ct)
+    // CODE CŨ: ExercisesAsync xử lý trực tiếp, không có deadline bao gồm kiểm tra roster.
+    private async Task<AiReply> ExercisesCoreAsync(ExerciseRequest request, CancellationToken ct)
     {
+        var contextTimer = Stopwatch.StartNew(); // FIX: gồm kiểm tra quyền sở hữu/roster.
         Validator.ValidateObject(request, new ValidationContext(request), true);
         if (!actor.IsCoach) throw new UnauthorizedAccessException("Chỉ Coach được yêu cầu gợi ý bài tập.");
         string? goal = null;
@@ -166,6 +202,7 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
         options.Value.RequireConfigured(); // FIX B48: vẫn kiểm tra ownership trước khi gọi Gemini.
         // Không chuyển email, phone, tên, ngày sinh hoặc lịch sử thanh toán sang provider.
         var prompt = JsonSerializer.Serialize(new { request.Goal, request.DurationMinutes, request.Level, request.Equipment, TrainingGoal = goal });
+        logger.LogInformation("AI context-ready traceId {TraceId} operation exercise contextMs {ContextMs}", http.HttpContext?.TraceIdentifier, contextTimer.ElapsedMilliseconds);
         var text = await client.GenerateAsync(Rules + " Gợi ý khởi động, bài chính (sets/reps), nghỉ và giãn cơ, nhắc Coach kiểm tra trước khi dùng.", new[] { new ChatMessage { Content = prompt } }, ct);
         return new() { Reply = text, Suggestions = text };
     }
