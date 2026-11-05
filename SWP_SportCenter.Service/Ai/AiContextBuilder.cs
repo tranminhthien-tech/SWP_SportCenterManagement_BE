@@ -25,7 +25,8 @@ public sealed class AiContextBuilder(AppDbContext db, CurrentActor actor, TimePr
         var ownSessions = db.ClassSessions.AsNoTracking().Where(s => !s.IsDeleted && !s.Class.IsDeleted &&
             s.Date >= day && (s.Class.Status == ClassStatus.Scheduled || s.Class.Status == ClassStatus.Ongoing));
         if (actor.IsMember) {
-            var id = await actor.MemberIdAsync();
+            // CODE CŨ: var id = await actor.MemberIdAsync();
+            var id = await actor.MemberIdAsync(ct); // FIX: deadline truyền đến truy vấn định danh Member.
             ownSessions = ownSessions.Where(s => db.ClassBookings.Any(b => b.ClassId == s.ClassId && b.MemberId == id &&
                 !b.IsDeleted && (b.Status == BookingStatus.Booked || b.Status == BookingStatus.Attended)));
         } else if (actor.IsCoach) {

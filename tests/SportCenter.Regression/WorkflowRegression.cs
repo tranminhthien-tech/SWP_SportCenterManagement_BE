@@ -466,6 +466,17 @@ internal static class WorkflowRegression
             Check(requestJson.RootElement.GetProperty("contents")[1].GetProperty("role").GetString() == "model", "B48 assistant history maps to Gemini model role");
         }
         Check(!aiHttp.LastBody.Contains(aiMember.Phone!) && !aiHttp.LastBody.Contains(aiMemberAccount.Email), "B48 chat context sends no account email or phone");
+        // FIX 05/11: câu chào vẫn gọi Gemini thật (handler giả trong test), nhưng không cần DB/profile/catalog.
+        Login(Account(AccountRole.Member, "ai_greeting_no_profile"));
+        var greetingCalls = aiHttp.Calls;
+        var greeting = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Xin chào! Bạn hỗ trợ gì tại SportCenter?", history = Array.Empty<object>() });
+        Check(greeting.IsSuccessStatusCode && aiHttp.Calls == greetingCalls + 1 && !aiHttp.LastBody.Contains("PersonalSchedule") &&
+            !aiHttp.LastBody.Contains("AI_PRIVATE_OWN_SCHEDULE"), "AI standalone greeting reaches provider without fetching private schedule or requiring member profile");
+        Check(!AiService.IsStandaloneGreeting("Xin chào, học phí lớp Gym bao nhiêu?") && !AiService.IsStandaloneGreeting("Hello cho tôi xem lịch học"),
+            "AI greeting optimization never strips context from price or schedule questions");
+        Login(aiMemberAccount);
+        await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello", history = new[] { new { role = "user", content = "Lịch của tôi?" } } });
+        Check(aiHttp.LastBody.Contains("PersonalSchedule"), "AI greeting with conversation history retains live authorized context");
         var normalBody = aiHttp.Body;
         aiHttp.Body = "{\"candidates\":{}}";
         var malformed = await http.PostAsJsonAsync("/api/ai/chat", new { message = "Hello" });
@@ -607,6 +618,17 @@ internal static class WorkflowRegression
         }
         Check(stalledReply.Error is AiUnavailableException { Code: "AI_TIMEOUT" }, "FE can distinguish timeout from daily quota");
         Check(new AiOptions().MaxRetries == 0, "Free quota protected by no automatic retry by default");
+        // FIX: token nghiệp vụ hủy nhưng HTTP chưa ngắt phải ghi operation-deadline, không caller.
+        var cancellationLog = new GeminiTestLogger();
+        var cancellationHttp = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
+        using (var cancelledOperation = new CancellationTokenSource()) {
+            cancelledOperation.Cancel();
+            var cancelledProvider = new GeminiClient(new HttpClient(new GeminiScriptHandler()), new GeminiTestOptions(geminiOptions), cancellationLog, cancellationHttp);
+            try { await cancelledProvider.GenerateAsync("system", Array.Empty<ChatMessage>(), cancelledOperation.Token); }
+            catch (OperationCanceledException) { }
+        }
+        Check(cancellationLog.Messages.Any(m => m.Contains("cause operation-deadline")) && !cancellationLog.Messages.Any(m => m.Contains("cause caller")),
+            "AI business cancellation is distinguished from HTTP caller cancellation");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }
