@@ -103,11 +103,19 @@ public sealed class GeminiClient(HttpClient client, IOptionsSnapshot<AiOptions> 
                         traceId, c.Model, attempt, timer.ElapsedMilliseconds);
                     throw new AiProviderException("Không kết nối được dịch vụ AI. Vui lòng thử lại sau.");
                 }
+                finally {
+                    // FIX 05/11: có timing từng attempt cả thành công/lỗi/deadline; không ghi prompt/body/key.
+                    logger.LogInformation("Gemini attempt-finished traceId {TraceId} model {Model} attempt {Attempt} phase {Phase} attemptMs {AttemptMs} elapsedMs {ElapsedMs}",
+                        traceId, c.Model, attempt, phase, attemptTimer.ElapsedMilliseconds, timer.ElapsedMilliseconds);
+                }
             }
             throw new AiUnavailableException("Gemini chưa sẵn sàng. Vui lòng thử lại sau.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) {
-            logger.LogInformation("Gemini caller-cancelled traceId {TraceId} model {Model} elapsedMs {ElapsedMs}", traceId, c.Model, timer.ElapsedMilliseconds);
+            // CODE CŨ: token gộp deadline cũng bị ghi "caller-cancelled", dù client chưa ngắt.
+            var callerCancelled = http.HttpContext?.RequestAborted.IsCancellationRequested;
+            var cause = callerCancelled == true ? "caller" : callerCancelled == false ? "operation-deadline" : "operation-token";
+            logger.LogInformation("Gemini operation-cancelled traceId {TraceId} model {Model} cause {Cause} elapsedMs {ElapsedMs}", traceId, c.Model, cause, timer.ElapsedMilliseconds); // FIX
             throw;
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested) {

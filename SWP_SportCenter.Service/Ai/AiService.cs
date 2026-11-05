@@ -181,6 +181,16 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
             throw new ArgumentException("Lịch sử tối đa 8 tin nhắn user/assistant, mỗi tin tối đa 1500 ký tự.");
         if (request.History.Sum(m => m.Content.Length) + request.Message.Length > 10000) throw new ArgumentException("Hội thoại quá dài.");
         options.Value.RequireConfigured(); // FIX B48: fail fast trước các query context khi Render thiếu env.
+        // FIX 05/11: chỉ bỏ context cho câu chào độc lập đã biết; mọi câu khác/history vẫn dùng dữ liệu thật.
+        // CODE CŨ: kể cả câu chào không history cũng luôn truy vấn catalog, lớp và lịch cá nhân bên dưới.
+        if (request.History.Count == 0 && IsStandaloneGreeting(request.Message)) {
+            logger.LogInformation("AI context-ready traceId {TraceId} operation chat contextMs {ContextMs} contextMode greeting",
+                http.HttpContext?.TraceIdentifier, contextTimer.ElapsedMilliseconds);
+            return new() { Reply = await client.GenerateAsync(Rules +
+                " Đây là câu chào độc lập. Chào ngắn gọn và giới thiệu khả năng hỗ trợ SportCenter. " +
+                "Không có catalog hay lịch được cung cấp trong lượt này, không đưa giá/lịch hoặc thông tin cá nhân cụ thể.",
+                new[] { new ChatMessage { Role = "user", Content = request.Message } }, ct) };
+        }
         var catalog = await db.MembershipPackages.AsNoTracking().Where(p => !p.IsDeleted && p.Status == MembershipStatus.Active)
             .OrderBy(p => p.Price).Take(10).Select(p => new { p.PackageName, p.Price, p.DurationDays, p.DiscountPercent }).ToListAsync(ct);
         var messages = request.History.Concat(new[] { new ChatMessage { Role = "user", Content = request.Message } }).ToArray();
@@ -194,6 +204,10 @@ public sealed class AiService(AppDbContext db, CurrentActor actor, IAiClient cli
             "nếu không có lịch thì nói chưa có trong dữ liệu, không lấy lịch công khai làm lịch đã đăng ký. " +
             "Catalog gói hiện bán: " + JsonSerializer.Serialize(catalog) + " Dữ liệu hiện tại: " + JsonSerializer.Serialize(context), messages, ct) };
     }
+    // FIX: allowlist bảo thủ, không dùng từ khóa rời để bỏ context của câu hỏi giá/lịch.
+    public static bool IsStandaloneGreeting(string message) => new[] {
+        "hello", "hi", "xin chào", "chào bạn", "xin chào! bạn hỗ trợ gì tại sportcenter"
+    }.Contains(message.Trim().TrimEnd('!', '.', '?').ToLowerInvariant());
     // CODE CŨ: ExercisesAsync xử lý trực tiếp, không có deadline bao gồm kiểm tra roster.
     private async Task<AiReply> ExercisesCoreAsync(ExerciseRequest request, CancellationToken ct)
     {

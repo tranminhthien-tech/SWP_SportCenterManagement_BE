@@ -24,9 +24,11 @@ public sealed class CurrentActor(AppDbContext db, IHttpContextAccessor http)
     public Guid AccountId => Guid.TryParse(http.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id)
         ? id : throw new UnauthorizedAccessException("Không tìm thấy AccountId trong token.");
 
-    public async Task<Guid> MemberIdAsync()
+    // CODE CŨ: MemberIdAsync() không nhận cancellation, truy vấn có thể tiếp tục sau deadline AI.
+    public async Task<Guid> MemberIdAsync(CancellationToken ct = default) // FIX: tương thích các caller cũ.
         => await db.Members.Where(m => m.AccountId == AccountId && !m.IsDeleted && !m.Account.IsDeleted)
-            .Select(m => (Guid?)m.Id).FirstOrDefaultAsync()
+            // CODE CŨ: .Select(m => (Guid?)m.Id).FirstOrDefaultAsync()
+            .Select(m => (Guid?)m.Id).FirstOrDefaultAsync(ct) // FIX
             ?? throw new KeyNotFoundException("Không tìm thấy hồ sơ Member.");
 
     public async Task EnsureCanViewMemberAsync(Guid memberId)
