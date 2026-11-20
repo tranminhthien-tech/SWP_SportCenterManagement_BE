@@ -629,6 +629,41 @@ internal static class WorkflowRegression
         }
         Check(cancellationLog.Messages.Any(m => m.Contains("cause operation-deadline")) && !cancellationLog.Messages.Any(m => m.Contains("cause caller")),
             "AI business cancellation is distinguished from HTTP caller cancellation");
+        // FIX B71: integration POST/PUT, dùng ngày/phòng riêng, không đụng lịch QA/live.
+        Login(manager);
+        var slotDay = today.AddDays(4);
+        var slotRoom1 = new Room { Id = Guid.NewGuid(), RoomName = "B71 room 1", Capacity = 30, Status = RoomStatus.Available };
+        var slotRoom2 = new Room { Id = Guid.NewGuid(), RoomName = "B71 room 2", Capacity = 30, Status = RoomStatus.Available };
+        Class SlotClass(string name, Guid coachId) => new() { Id = Guid.NewGuid(), ClassName = name, CoachId = coachId,
+            CategoryId = category.Id, StartDate = today, EndDate = today.AddDays(7), Status = ClassStatus.Scheduled, MaxCapacity = 10 };
+        var slotA = SlotClass("B71 A", coach.Id); var slotB = SlotClass("B71 B same coach", coach.Id); var slotC = SlotClass("B71 C other coach", otherCoach.Id);
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.AddRange(slotRoom1, slotRoom2, slotA, slotB, slotC); await db.SaveChangesAsync(); }
+        object Slot(Guid classId, Guid roomId, double start, double end, DateTime? date = null) => new {
+            classId, roomId, date = date ?? slotDay, startTime = TimeSpan.FromHours(start), endTime = TimeSpan.FromHours(end) };
+        async Task<HttpResponseMessage> AddSlot(Guid classId, Guid roomId, double start, double end, DateTime? date = null) =>
+            await http.PostAsJsonAsync("/api/class-sessions", Slot(classId, roomId, start, end, date));
+        var baseSlot = await AddSlot(slotA.Id, slotRoom1.Id, 16, 17);
+        Check(baseSlot.StatusCode == HttpStatusCode.Created, "B71 baseline slot created");
+        var baseSlotId = (await Json(baseSlot)).GetProperty("id").GetGuid();
+        Check((await AddSlot(slotC.Id, slotRoom1.Id, 16.25, 16.75)).StatusCode == HttpStatusCode.BadRequest, "B71 same room different coach blocked");
+        var sameClass = await AddSlot(slotA.Id, slotRoom2.Id, 16.25, 16.75);
+        Check(sameClass.StatusCode == HttpStatusCode.BadRequest && (await Json(sameClass)).GetProperty("message").GetString()!.Contains("Lớp học"), "B71 same class different room blocked with JSON business message");
+        var sameCoach = await AddSlot(slotB.Id, slotRoom2.Id, 15.5, 17.5);
+        Check(sameCoach.StatusCode == HttpStatusCode.BadRequest && (await Json(sameCoach)).GetProperty("message").GetString()!.Contains("Huấn luyện viên"), "B71 same coach other class other room and enclosing interval blocked");
+        Check((await AddSlot(slotC.Id, slotRoom2.Id, 16.25, 16.75)).StatusCode == HttpStatusCode.Created, "B71 different room class coach allowed");
+        Check((await AddSlot(slotA.Id, slotRoom1.Id, 15, 16)).StatusCode == HttpStatusCode.Created &&
+            (await AddSlot(slotA.Id, slotRoom1.Id, 17, 18)).StatusCode == HttpStatusCode.Created, "B71 half-open intervals allow adjacent sessions both sides");
+        Check((await AddSlot(slotA.Id, slotRoom1.Id, 16, 17, slotDay.AddDays(1))).StatusCode == HttpStatusCode.Created, "B71 same time on different day allowed");
+        var movable = await AddSlot(slotB.Id, slotRoom2.Id, 19, 20); var movableId = (await Json(movable)).GetProperty("id").GetGuid();
+        Check((await http.PutAsJsonAsync($"/api/class-sessions/{movableId}", Slot(slotB.Id, slotRoom2.Id, 16.25, 16.75))).StatusCode == HttpStatusCode.BadRequest, "B71 PUT rechecks coach collision");
+        Check((await http.PutAsJsonAsync($"/api/class-sessions/{movableId}", Slot(slotB.Id, slotRoom2.Id, 18, 19))).StatusCode == HttpStatusCode.NoContent, "B71 PUT excludes own session when moving adjacent");
+        // Seed lịch legacy trùng: giữ nguyên slot không bị khóa, nhưng đổi slot phải kiểm lại.
+        using (var scope = app.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.ClassSessions.Add(new ClassSession { Id = Guid.NewGuid(), ClassId = slotA.Id, RoomId = slotRoom2.Id,
+                Date = DateOnly.FromDateTime(slotDay), StartTime = TimeSpan.FromHours(16), EndTime = TimeSpan.FromHours(17) }); await db.SaveChangesAsync(); }
+        Check((await http.PutAsJsonAsync($"/api/class-sessions/{baseSlotId}", Slot(slotA.Id, slotRoom1.Id, 16, 17))).StatusCode == HttpStatusCode.NoContent, "B71 unchanged legacy slot allowed");
+        Check((await http.PutAsJsonAsync($"/api/class-sessions/{baseSlotId}", Slot(slotA.Id, slotRoom1.Id, 16.1, 16.9))).StatusCode == HttpStatusCode.BadRequest, "B71 legacy time edit rechecks conflicts");
         Console.WriteLine($"RESULT {passed} workflow checks passed"); await app.StopAsync(); await app.DisposeAsync();
     }
 }

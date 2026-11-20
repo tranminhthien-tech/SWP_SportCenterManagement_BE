@@ -90,6 +90,9 @@ public class ClassSessionService : IClassSessionService
 
     public async Task<Response.ClassSessionResponse> CreateAsync(Request.CreateClassSessionRequest request)
     {
+        // FIX B71: kiểm tra và lưu trong Serializable để hai request đồng thời không cùng vượt kiểm trùng.
+        await using var tx = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
         await ValidateSessionLogicAsync(request.ClassId, request.RoomId, DateOnly.FromDateTime(request.Date), request.StartTime, request.EndTime);
 
         var newSession = new Repository.Entity.ClassSession
@@ -103,6 +106,7 @@ public class ClassSessionService : IClassSessionService
 
         _context.ClassSessions.Add(newSession);
         await _context.SaveChangesAsync();
+        if (tx != null) await tx.CommitAsync(); // FIX B71
 
         // CODE CŨ: return await GetByIdAsync(newSession.Id) ?? throw new Exception("Lỗi khi tạo lịch học.");
         // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
@@ -111,15 +115,21 @@ public class ClassSessionService : IClassSessionService
 
     public async Task<bool> UpdateAsync(Guid id, Request.UpdateClassSessionRequest request)
     {
+        // FIX B71: cùng transaction cho đọc lịch, kiểm trùng, thông báo và lưu.
+        await using var tx = _context.Database.IsRelational()
+            ? await _context.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable) : null;
         var session = await _context.ClassSessions.FindAsync(id);
-        if (session == null) return false;
+        // CODE CŨ: if (session == null) return false;
+        if (session == null || session.IsDeleted) return false; // FIX B71
 
-        await ValidateSessionLogicAsync(request.ClassId, request.RoomId, DateOnly.FromDateTime(request.Date), request.StartTime, request.EndTime, id);
+        // CODE CŨ: luôn kiểm trùng ngay cả khi giữ nguyên slot của dữ liệu lịch cũ.
+        // await ValidateSessionLogicAsync(request.ClassId, request.RoomId, DateOnly.FromDateTime(request.Date), request.StartTime, request.EndTime, id);
 
         // CODE CŨ: cập nhật lịch mà không tạo thông báo.
         // FIX B32: chỉ thông báo khi lịch/phòng/lớp thực sự đổi, bao gồm học viên lớp cũ và mới.
         var changed = session.ClassId != request.ClassId || session.RoomId != request.RoomId ||
             session.Date != DateOnly.FromDateTime(request.Date) || session.StartTime != request.StartTime || session.EndTime != request.EndTime;
+        await ValidateSessionLogicAsync(request.ClassId, request.RoomId, DateOnly.FromDateTime(request.Date), request.StartTime, request.EndTime, id, changed); // FIX B71
         if (changed)
             await QueueSessionNotificationsAsync(new[] { session.ClassId, request.ClassId },
                 "Lịch học đã thay đổi",
@@ -133,6 +143,7 @@ public class ClassSessionService : IClassSessionService
 
         _context.ClassSessions.Update(session);
         await _context.SaveChangesAsync();
+        if (tx != null) await tx.CommitAsync(); // FIX B71
 
         return true;
     }
@@ -261,7 +272,8 @@ public class ClassSessionService : IClassSessionService
     DateOnly date,
     TimeSpan startTime,
     TimeSpan endTime,
-    Guid? currentSessionId = null)
+    Guid? currentSessionId = null,
+    bool checkConflicts = true) // FIX B71: giữ nguyên slot không bị chặn bởi trùng lịch legacy.
 {
     // 1. Kiểm tra thời gian
     if (startTime >= endTime)
@@ -276,7 +288,7 @@ public class ClassSessionService : IClassSessionService
     // 2. Kiểm tra lớp học có tồn tại không
     var classEntity = await _context.Classes
         .AsNoTracking()
-        .FirstOrDefaultAsync(c => c.Id == classId);
+        .FirstOrDefaultAsync(c => c.Id == classId && !c.IsDeleted); // FIX B71
 
     if (classEntity == null)
     {
@@ -305,7 +317,7 @@ public class ClassSessionService : IClassSessionService
     // 4. Kiểm tra phòng tập có tồn tại không
     var room = await _context.Rooms
         .AsNoTracking()
-        .FirstOrDefaultAsync(r => r.Id == roomId);
+        .FirstOrDefaultAsync(r => r.Id == roomId && !r.IsDeleted); // FIX B71
 
     if (room == null)
     {
@@ -324,7 +336,7 @@ public class ClassSessionService : IClassSessionService
             $"Phòng tập \"{room.RoomName}\" đang tạm ngưng sử dụng.");
     }
 
-    // 6. Kiểm tra lịch trùng phòng trong cùng ngày
+    /* CODE CŨ B71: chỉ kiểm RoomId, bỏ lọt cùng lớp/HLV ở phòng khác.
     var conflictingSession = await _context.ClassSessions
         .AsNoTracking()
         .Where(cs =>
@@ -335,6 +347,19 @@ public class ClassSessionService : IClassSessionService
         .FirstOrDefaultAsync(cs =>
             startTime < cs.EndTime &&
             endTime > cs.StartTime);
+    */
+
+    // FIX B71: [start,end), bỏ chính buổi đang sửa, lịch/lớp đã xóa và lớp đã hủy.
+    // Giữ nguyên slot của lịch cũ được phép; đổi lớp/phòng/ngày/giờ phải kiểm tra lại.
+    if (!checkConflicts) return;
+    var conflictingSession = await _context.ClassSessions.AsNoTracking()
+        .Where(cs => !cs.IsDeleted && !cs.Class.IsDeleted && cs.Class.Status != ClassStatus.Cancelled &&
+            cs.Date == date && (!currentSessionId.HasValue || cs.Id != currentSessionId.Value) &&
+            startTime < cs.EndTime && endTime > cs.StartTime &&
+            (cs.RoomId == roomId || cs.ClassId == classId || cs.Class.CoachId == classEntity.CoachId))
+        .OrderBy(cs => cs.StartTime).ThenBy(cs => cs.Id)
+        .Select(cs => new { cs.RoomId, cs.ClassId, cs.StartTime, cs.EndTime })
+        .FirstOrDefaultAsync();
 
     // 7. Báo lỗi nếu thời gian bị trùng
     if (conflictingSession != null)
@@ -344,10 +369,12 @@ public class ClassSessionService : IClassSessionService
         //             $"{conflictingSession.StartTime:hh\\:mm} đến " +
         //             $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");
         // FIX B6: phân loại lỗi nghiệp vụ để middleware trả JSON 400/409.
+        // CODE CŨ: luôn báo trùng phòng dù xung đột do lớp hoặc HLV.
+        // throw new BusinessException($"Phòng tập đã có lịch sử dụng từ {conflictingSession.StartTime} đến {conflictingSession.EndTime}.");
+        var subject = conflictingSession.RoomId == roomId ? $"Phòng tập \"{room.RoomName}\""
+            : conflictingSession.ClassId == classId ? "Lớp học này" : "Huấn luyện viên của lớp";
         throw new SWP_SportCenter.Service.Exceptions.BusinessException(
-            $"Phòng tập \"{room.RoomName}\" đã có lịch sử dụng từ " +
-            $"{conflictingSession.StartTime:hh\\:mm} đến " +
-            $"{conflictingSession.EndTime:hh\\:mm} vào ngày này.");
+            $"{subject} đã có lịch từ {conflictingSession.StartTime:hh\\:mm} đến {conflictingSession.EndTime:hh\\:mm} vào ngày này."); // FIX B71
     }
 }
 }
